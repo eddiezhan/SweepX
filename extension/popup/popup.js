@@ -585,6 +585,13 @@ async function handleLoadFollowing() {
     followingUsers = (resp && resp.users) || [];
     unfollowMutation = pickUnfollowMutation(resp && resp.mutationCandidates);
 
+    const cands = (resp && resp.mutationCandidates) || [];
+    if (cands.length > 0) {
+      log(`[取关候选] ${cands.map(c => c.opName).join(', ')}`, 'info');
+    } else {
+      log('[取关候选] 无 —— 手动取关动作未被捕获。确认：页面已刷新 + 就在「关注」页上点的取关按钮。', 'warn');
+    }
+
     if (followingUsers.length === 0) {
       followingStatus.textContent = '未捕获到关注列表。请打开「关注」列表页并刷新页面后重试。';
     } else if (!unfollowMutation) {
@@ -622,25 +629,38 @@ async function handleStartUnfollow() {
     });
   }
 
-  // Locate the target-id field in the learned template (no guessed names:
-  // whatever user-id field the page used, we swap exactly that one)
-  let parsedBody;
+  // Locate the target-id field in the learned template. Two body shapes exist:
+  // JSON (GraphQL mutations) and form-encoded (v1.1 friendships/destroy).
+  // No guessed names — whatever field carried the demo target, we swap that one.
+  let parsedBody = null;
+  let formParams = null;
+  let isJsonBody = false;
   let idField = null;
-  let oldValue = null;
+  let swapWith = null; // 'id' (numeric user id) or 'name' (screen_name)
   try {
-    parsedBody = JSON.parse(unfollowMutation.bodyText);
-    for (const [k, v] of Object.entries(parsedBody.variables || {})) {
-      if (typeof v === 'string' && /^\d{6,}$/.test(v)) {
-        idField = k;
-        oldValue = v;
-        break;
+    const raw = unfollowMutation.bodyText.trim();
+    if (raw.startsWith('{')) {
+      isJsonBody = true;
+      parsedBody = JSON.parse(raw);
+      for (const [k, v] of Object.entries(parsedBody.variables || {})) {
+        if (typeof v !== 'string' || !v) continue;
+        if (/^\d{6,}$/.test(v)) { idField = k; swapWith = 'id'; break; }
+        if (/screen_name/i.test(k)) { idField = k; swapWith = 'name'; break; }
+      }
+    } else {
+      formParams = new URLSearchParams(raw);
+      for (const [k, v] of formParams.entries()) {
+        if (!v) continue;
+        if (/^\d{6,}$/.test(v)) { idField = k; swapWith = 'id'; break; }
+        if (/screen_name/i.test(k)) { idField = k; swapWith = 'name'; break; }
       }
     }
   } catch (e) { /* handled below */ }
   if (!idField) {
-    alert('未能从学习的请求中识别目标用户字段，取关终止。');
+    alert(`未能从学习的请求中识别目标用户字段 (body: ${unfollowMutation.bodyText.slice(0, 120)})，取关终止。`);
     return;
   }
+  log(`[取关] 已识别目标字段: ${idField} (${swapWith === 'id' ? '用户ID' : '用户名'})`, 'info');
 
   unfollowRunning = true;
   unfollowBtn.disabled = true;
@@ -649,14 +669,22 @@ async function handleStartUnfollow() {
 
   for (const u of followingUsers) {
     try {
-      const body = JSON.stringify({
-        ...parsedBody,
-        variables: { ...parsedBody.variables, [idField]: u.id }
-      });
+      let body;
+      if (isJsonBody) {
+        body = JSON.stringify({
+          ...parsedBody,
+          variables: { ...parsedBody.variables, [idField]: swapWith === 'id' ? u.id : u.name }
+        });
+      } else {
+        formParams.set(idField, swapWith === 'id' ? u.id : u.name);
+        body = formParams.toString();
+      }
+      const headers = client.getHeaders();
+      headers['content-type'] = isJsonBody ? 'application/json' : 'application/x-www-form-urlencoded';
       const res = await fetch(unfollowMutation.url, {
         method: 'POST',
         credentials: 'include',
-        headers: client.getHeaders(),
+        headers,
         body
       });
       if (res.ok) {

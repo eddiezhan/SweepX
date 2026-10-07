@@ -18,6 +18,9 @@
 
   // queryId = path segment, operationName = last segment
   const GRAPHQL_RE = /\/i\/api\/graphql\/([^/]+)\/([A-Za-z0-9_]+)/;
+  // Follow/unfollow still goes through the legacy v1.1 REST API on web:
+  // POST /1.1/friendships/create.json (follow) | destroy.json (unfollow)
+  const FRIENDSHIPS_RE = /\/1\.1\/friendships\/(create|destroy)\.json/;
 
   // Self-diagnostics + persistent buffer. The buffer lives HERE (MAIN world,
   // installed at document_start) because the scanner's listeners only come up
@@ -233,6 +236,22 @@
               }).catch(() => {});
             }
           }
+        } else if (FRIENDSHIPS_RE.test(url)) {
+          // v1.1 REST follow/unfollow (the web client still uses these)
+          try {
+            const init = args[1];
+            const body = init && typeof init.body === 'string' ? init.body : null;
+            if (body) {
+              const kind = FRIENDSHIPS_RE.exec(url)[1];
+              followBuffer.mutationCandidates.push({
+                opName: `friendships/${kind}`,
+                queryId: '',
+                url,
+                bodyText: body
+              });
+              if (followBuffer.mutationCandidates.length > 5) followBuffer.mutationCandidates.shift();
+            }
+          } catch (e) { /* ignore */ }
         }
       } catch (e) { /* ignore */ }
       return promise;
@@ -279,6 +298,9 @@
               watchResponseText(this.responseText);
             });
           }
+        } else if (FRIENDSHIPS_RE.test(String(url))) {
+          const fm = FRIENDSHIPS_RE.exec(String(url));
+          this.__sweepx = { queryId: '', opName: `friendships/${fm[1]}`, url: String(url) };
         }
       } catch (e) { /* ignore */ }
       return origOpen.apply(this, [method, url, ...rest]);
