@@ -1,5 +1,5 @@
 /**
- * deleteX - Core Deletion Execution & Throttling Engine
+ * SweepX - Core Deletion Execution & Throttling Engine
  * 
  * Implements anti-ban jitter delays, sliding window batch cooling,
  * and HTTP 429 exponential backoff.
@@ -199,9 +199,11 @@ export class DeletionEngine {
           this.setState(EngineState.STOPPED, 'Authentication failed. Please refresh login session.');
           break;
         } else {
-          // Other unexpected error: report and proceed or retry
+          // Other unexpected error: report and skip to prevent deadlock.
+          // Still sleep the jitter delay — never hammer the API on repeated failures.
           this.onError({ error: err, item });
-          this.currentIndex++; // Skip failing item to prevent deadlock
+          this.currentIndex++;
+          await this.sleepFn(this.getRandomDelay());
         }
       }
     }

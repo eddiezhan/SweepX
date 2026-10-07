@@ -13,6 +13,13 @@ import {
   EngineState
 } from '../core/engine.js';
 
+import {
+  createCheckpoint,
+  saveProgress,
+  loadCheckpoint,
+  clearCheckpoint
+} from '../core/checkpoint.js';
+
 // Application State
 let rawTweets = [];
 let matchedTweets = [];
@@ -75,12 +82,18 @@ const clearLogBtn = document.getElementById('clear-log-btn');
 const previewCountLabel = document.getElementById('preview-count-label');
 const previewTbody = document.getElementById('preview-tbody');
 
+const resumeBar = document.getElementById('resume-bar');
+const resumeText = document.getElementById('resume-text');
+const resumeBtn = document.getElementById('resume-btn');
+const resumeDiscardBtn = document.getElementById('resume-discard-btn');
+
 // --- Initialization ---
 init();
 
 function init() {
   bindEvents();
   checkSession();
+  checkResume();
 }
 
 function bindEvents() {
@@ -142,6 +155,27 @@ function bindEvents() {
   stopBtn.addEventListener('click', handleStop);
   exportBtn.addEventListener('click', handleExport);
   clearLogBtn.addEventListener('click', () => { logConsole.innerHTML = ''; });
+
+  // Checkpoint Resume
+  resumeBtn.addEventListener('click', handleResume);
+  resumeDiscardBtn.addEventListener('click', handleDiscardCheckpoint);
+}
+
+// --- Resume unfinished run (checkpoint) ---
+async function checkResume() {
+  try {
+    const cp = await loadCheckpoint();
+    if (!cp) return;
+    resumeText.textContent =
+      `检测到未完成任务：已处理 ${cp.state.currentIndex}/${cp.queue.length} (${cp.state.dryRun ? 'Dry-Run' : '真实删除'})`;
+    resumeBar.style.display = 'flex';
+  } catch (e) { /* ignore */ }
+}
+
+async function handleDiscardCheckpoint() {
+  await clearCheckpoint();
+  resumeBar.style.display = 'none';
+  appendLog('已放弃未完成的清理任务。', 'warn');
 }
 
 // --- Session Handling ---
@@ -312,9 +346,11 @@ async function handleStart() {
 
   if (!confirm(confirmMsg)) return;
 
-  if (!client) {
-    initClient();
-  }
+  await ensureClientReady();
+
+  // Persist checkpoint so the run survives tab/browser close (resume later)
+  await createCheckpoint(matchedTweets, { dryRun: isDryRun });
+  resumeBar.style.display = 'none';
 
   // Reset metrics
   countSuccess = 0;
@@ -322,9 +358,49 @@ async function handleStart() {
   countFailed = 0;
   updateMetricsDisplay(0, matchedTweets.length);
 
-  engine = new DeletionEngine({
+  engine = buildEngine(isDryRun);
+  engine.setQueue(matchedTweets);
+  appendLog(`[任务启动] 队列共 ${matchedTweets.length} 项 (Dry-Run: ${isDryRun})`, 'info');
+  await engine.start();
+}
+
+/** Ensures the API client exists and applies page-captured queryIds. */
+async function ensureClientReady() {
+  if (!client) {
+    initClient();
+  }
+
+  // Follow X's live queryId rotations captured from the page (queryid-sniffer.js)
+  const captured = {};
+  try {
+    const stored = await chrome.storage.local.get(['queryId_DeleteTweet', 'queryId_DeleteRetweet']);
+    if (stored.queryId_DeleteTweet) captured.DeleteTweet = stored.queryId_DeleteTweet;
+    if (stored.queryId_DeleteRetweet) captured.DeleteRetweet = stored.queryId_DeleteRetweet;
+  } catch (e) { /* fall back to defaults */ }
+  if (Object.keys(captured).length > 0) {
+    client.setQueryIds(captured);
+    appendLog('已自动学习页面最新接口参数 (queryId)，自动适配 X 改版。', 'info');
+  } else {
+    appendLog('未捕获到页面接口参数，使用内置默认值。若删除报 404，请先在 x.com 上手动删除一条推文，扩展会自动学习最新参数。', 'warn');
+  }
+}
+
+/** Persists the queryIds just used successfully, so future runs use them. */
+function persistQueryIds() {
+  if (!client) return;
+  try {
+    chrome.storage.local.set({
+      queryId_DeleteTweet: client.queryIds.DeleteTweet,
+      queryId_DeleteRetweet: client.queryIds.DeleteRetweet
+    });
+  } catch (e) { /* ignore */ }
+}
+
+/** Builds the deletion engine with the shared UI wiring. */
+function buildEngine(dryRun) {
+  return new DeletionEngine({
     client,
-    dryRun: isDryRun,
+    dryRun,
     minDelayMs: 2000,
     maxDelayMs: 4500,
     batchSize: 60,
@@ -344,6 +420,22 @@ async function handleStart() {
       metricSuccess.textContent = countSuccess;
       metricAlready.textContent = countAlready;
       metricFailed.textContent = countFailed;
+      if (p.result.status === 'success') {
+        // Bootstrap queryId learning: persist the IDs just used successfully
+        persistQueryIds();
+      }
+      // Auto-remove completed items from the working set (real runs only —
+      // dry-run must leave the list intact for the real run afterwards)
+      if (p.result.status === 'success' || p.result.status === 'already_deleted') {
+        rawTweets = rawTweets.filter(t => t.id !== p.item.id);
+        updateOverviewStats();
+        applyFilters();
+      }
+      saveProgress(p.current, {
+        success: countSuccess,
+        already: countAlready,
+        failed: countFailed
+      }).catch(() => {});
     },
     onStateChange: (s) => {
       progressStatusText.textContent = s.message || s.state;
@@ -361,6 +453,11 @@ async function handleStart() {
         pauseBtn.disabled = true;
         stopBtn.disabled = true;
         hideCoolingBanner();
+        if (s.state === EngineState.IDLE) {
+          // Run completed — checkpoint no longer needed
+          clearCheckpoint().catch(() => {});
+          appendLog('任务完成。x.com 页面不会自动刷新，请刷新页面确认删除结果。', 'info');
+        }
       }
     },
     onError: (e) => {
@@ -370,9 +467,47 @@ async function handleStart() {
       showCoolingBanner(c.durationMs);
     }
   });
+}
 
+/** Resumes an interrupted run from the persisted checkpoint. */
+async function handleResume() {
+  const cp = await loadCheckpoint();
+  if (!cp) {
+    resumeBar.style.display = 'none';
+    return;
+  }
+
+  const remaining = cp.queue.length - cp.state.currentIndex;
+  const confirmResume = confirm(
+    `检测到未完成的清理任务：已处理 ${cp.state.currentIndex}/${cp.queue.length}，剩余 ${remaining} 项 (${cp.state.dryRun ? 'Dry-Run' : '真实删除'})。\n\n是否从上次中断处继续？`
+  );
+  if (!confirmResume) return;
+
+  if (!cp.state.dryRun && !activeSession) {
+    alert('未检测到有效的 x.com 会话凭据，无法继续真实删除！');
+    return;
+  }
+
+  matchedTweets = cp.queue;
+  dryRunToggle.checked = cp.state.dryRun;
+  await ensureClientReady();
+
+  // Restore metrics from checkpoint
+  countSuccess = cp.state.success;
+  countAlready = cp.state.already;
+  countFailed = cp.state.failed;
+
+  resumeBar.style.display = 'none';
+
+  engine = buildEngine(cp.state.dryRun);
   engine.setQueue(matchedTweets);
-  appendLog(`[任务启动] 队列共 ${matchedTweets.length} 项 (Dry-Run: ${isDryRun})`, 'info');
+  engine.currentIndex = cp.state.currentIndex;
+  updateMetricsDisplay(cp.state.currentIndex, matchedTweets.length);
+  metricSuccess.textContent = countSuccess;
+  metricAlready.textContent = countAlready;
+  metricFailed.textContent = countFailed;
+
+  appendLog(`[任务恢复] 从第 ${cp.state.currentIndex + 1} 项继续 (剩余 ${remaining} 项)。`, 'info');
   await engine.start();
 }
 
@@ -446,7 +581,7 @@ function handleExport() {
 
   const a = document.createElement('a');
   a.href = url;
-  a.download = `deleteX_backup_${new Date().toISOString().slice(0, 10)}.csv`;
+  a.download = `SweepX_backup_${new Date().toISOString().slice(0, 10)}.csv`;
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);

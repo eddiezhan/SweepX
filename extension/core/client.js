@@ -1,5 +1,5 @@
 /**
- * deleteX - Core GraphQL Client for X (Twitter)
+ * SweepX - Core GraphQL Client for X (Twitter)
  * 
  * Interacts directly with X's internal GraphQL endpoints:
  * - DeleteTweet: for original posts, quotes, and replies
@@ -50,7 +50,9 @@ export class XDeletionClient {
       ...DEFAULT_QUERY_IDS,
       ...(options.queryIds || {})
     };
-    this.fetchFn = options.fetchFn || globalThis.fetch;
+    // fetch is a native method requiring `this` === window; calling it detached
+    // throws "Illegal invocation" in Chrome, so bind it
+    this.fetchFn = options.fetchFn || globalThis.fetch.bind(globalThis);
   }
 
   /**
@@ -96,6 +98,10 @@ export class XDeletionClient {
 
     const res = await this.fetchFn(url, {
       method: 'POST',
+      // Browser: attach the real x.com cookies (incl. httpOnly auth_token) via
+      // host_permissions. Without this the request goes out unauthenticated.
+      // Manual 'cookie' headers are stripped by browsers (forbidden header).
+      credentials: 'include',
       headers: this.getHeaders(),
       body: JSON.stringify(payload)
     });
@@ -124,6 +130,8 @@ export class XDeletionClient {
 
     const res = await this.fetchFn(url, {
       method: 'POST',
+      // See deleteTweet: cookies must come from the browser cookie jar
+      credentials: 'include',
       headers: this.getHeaders(),
       body: JSON.stringify(payload)
     });
@@ -149,9 +157,21 @@ export class XDeletionClient {
   }
 
   async _handleResponse(res, targetId, operationName) {
+    // Read body defensively: prefer .text() (works for non-JSON error bodies),
+    // fall back to .json() for test mocks / legacy response-like objects
+    let data = null;
+    let bodyText = '';
+    try {
+      if (typeof res.text === 'function') {
+        bodyText = (await res.text()) || '';
+        data = bodyText ? JSON.parse(bodyText) : null;
+      } else if (typeof res.json === 'function') {
+        data = await res.json();
+      }
+    } catch (e) { /* non-JSON body */ }
+
     if (res.status === 200) {
-      const data = await res.json();
-      if (data.errors && data.errors.length > 0) {
+      if (data && data.errors && data.errors.length > 0) {
         const errorMessages = data.errors.map(e => e.message || '').join('; ');
         // Check if tweet was already deleted or not found
         const isAlreadyDeleted = data.errors.some(
@@ -172,17 +192,37 @@ export class XDeletionClient {
           message: errorMessages
         };
       }
+      // A 200 without errors must still contain the operation-specific result
+      // key (delete_tweet / unretweet) to count as a real success — this
+      // catches silent no-ops (e.g. a stale queryId resolving elsewhere)
+      const opKey = operationName === 'DeleteRetweet' ? 'unretweet' : 'delete_tweet';
+      if (!data || data.data === undefined || !data.data[opKey]) {
+        return {
+          status: 'failed',
+          id: targetId,
+          operation: operationName,
+          message: `Unexpected response payload (queryId may be stale): ${bodyText ? bodyText.slice(0, 250) : '(empty body)'}`
+        };
+      }
       return {
         status: 'success',
         id: targetId,
         operation: operationName
       };
-    } else if (res.status === 429) {
-      throw new RateLimitError('Rate limit exceeded (HTTP 429). Please slow down or cool off.');
-    } else if (res.status === 401 || res.status === 403) {
-      throw new AuthError(`Authentication error (HTTP ${res.status}). Verify your ct0/cookie session.`);
-    } else {
-      throw new Error(`Unexpected HTTP status ${res.status} during ${operationName}`);
     }
+
+    // Surface X's actual error payload in logs so failures are diagnosable
+    const detail = bodyText ? ` Response: ${bodyText.slice(0, 300)}` : '';
+
+    if (res.status === 429) {
+      throw new RateLimitError('Rate limit exceeded (HTTP 429). Please slow down or cool off.');
+    }
+    if (res.status === 401 || res.status === 403) {
+      throw new AuthError(`Authentication error (HTTP ${res.status}).${detail || ' Verify your ct0/cookie session.'}`);
+    }
+    if (res.status === 404) {
+      throw new Error(`GraphQL ${operationName} queryId appears outdated (HTTP 404). The query ID needs updating.${detail}`);
+    }
+    throw new Error(`Unexpected HTTP status ${res.status} during ${operationName}.${detail}`);
   }
 }

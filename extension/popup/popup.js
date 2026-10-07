@@ -13,6 +13,13 @@ import {
   EngineState
 } from '../core/engine.js';
 
+import {
+  createCheckpoint,
+  saveProgress,
+  loadCheckpoint,
+  clearCheckpoint
+} from '../core/checkpoint.js';
+
 // State
 let rawTweets = [];
 let matchedTweets = [];
@@ -42,6 +49,7 @@ const fileLoadedStatus = document.getElementById('file-loaded-status');
 
 const scanPageBtn = document.getElementById('scan-page-btn');
 const liveScanStatus = document.getElementById('live-scan-status');
+const scanTimesInput = document.getElementById('scan-times-input');
 
 const catRt = document.getElementById('cat-rt');
 const catReply = document.getElementById('cat-reply');
@@ -77,11 +85,56 @@ const stopRunBtn = document.getElementById('stop-run-btn');
 const exportCsvBtn = document.getElementById('export-csv-btn');
 const miniLogBox = document.getElementById('mini-log-box');
 
+const resumeBar = document.getElementById('resume-bar');
+const resumeText = document.getElementById('resume-text');
+const resumeBtn = document.getElementById('resume-btn');
+const resumeDiscardBtn = document.getElementById('resume-discard-btn');
+
+const loadFollowingBtn = document.getElementById('load-following-btn');
+const followingStatus = document.getElementById('following-status');
+const unfollowBtn = document.getElementById('unfollow-btn');
+
+// Unfollow state
+let followingUsers = [];
+let unfollowMutation = null;
+let unfollowRunning = false;
+
 // Init
 document.addEventListener('DOMContentLoaded', () => {
   bindEvents();
+  restoreScanTimes();
   checkSession();
+  checkResume();
 });
+
+function clampScanTimes(val) {
+  const n = parseInt(val, 10);
+  if (Number.isNaN(n)) return 8;
+  return Math.max(1, Math.min(50, n));
+}
+
+function restoreScanTimes() {
+  chrome.storage.local.get('scanTimes', ({ scanTimes }) => {
+    if (scanTimes) scanTimesInput.value = scanTimes;
+  });
+}
+
+// --- Resume unfinished run (checkpoint) ---
+async function checkResume() {
+  try {
+    const cp = await loadCheckpoint();
+    if (!cp) return;
+    resumeText.textContent =
+      `检测到未完成任务：已处理 ${cp.state.currentIndex}/${cp.queue.length} (${cp.state.dryRun ? 'Dry-Run' : '真实删除'})`;
+    resumeBar.style.display = 'flex';
+  } catch (e) { /* ignore */ }
+}
+
+async function handleDiscardCheckpoint() {
+  await clearCheckpoint();
+  resumeBar.style.display = 'none';
+  log('已放弃未完成的清理任务。', 'warn');
+}
 
 function bindEvents() {
   // Tabs
@@ -128,6 +181,10 @@ function bindEvents() {
 
   // Live Scan
   scanPageBtn.addEventListener('click', handleLiveScan);
+  scanTimesInput.addEventListener('change', () => {
+    // Persist scan depth across sessions
+    chrome.storage.local.set({ scanTimes: clampScanTimes(scanTimesInput.value) });
+  });
 
   // Filters
   [catRt, catReply, catOrig, catQuote, filterBeforeDate, keepFavInput, excludeKwInput].forEach(el => {
@@ -141,6 +198,14 @@ function bindEvents() {
   pauseRunBtn.addEventListener('click', handlePause);
   stopRunBtn.addEventListener('click', handleStop);
   exportCsvBtn.addEventListener('click', handleExportCsv);
+
+  // Checkpoint Resume
+  resumeBtn.addEventListener('click', handleResumeExecution);
+  resumeDiscardBtn.addEventListener('click', handleDiscardCheckpoint);
+
+  // Unfollow
+  loadFollowingBtn.addEventListener('click', handleLoadFollowing);
+  unfollowBtn.addEventListener('click', handleStartUnfollow);
 }
 
 function switchTab(mode) {
@@ -236,10 +301,25 @@ function readFileAsText(file) {
 }
 
 // Live Timeline Scan
+function sleep(ms) {
+  return new Promise(r => setTimeout(r, ms));
+}
+
+async function waitForTabComplete(tabId, timeoutMs = 15000) {
+  const start = Date.now();
+  while (Date.now() - start < timeoutMs) {
+    try {
+      const tab = await chrome.tabs.get(tabId);
+      if (tab.status === 'complete') return;
+    } catch (e) { /* tab may be gone */ }
+    await sleep(300);
+  }
+}
+
 async function handleLiveScan() {
   scanPageBtn.disabled = true;
   scanPageBtn.textContent = '⏳ 正在滚动扫描中...';
-  liveScanStatus.textContent = '正在获取当前标签页推文...';
+  liveScanStatus.textContent = '正在准备扫描...';
 
   try {
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
@@ -247,11 +327,74 @@ async function handleLiveScan() {
       throw new Error('请先在浏览器当前标签页打开 x.com 个人主页');
     }
 
-    const response = await chrome.tabs.sendMessage(tab.id, { type: 'SCAN_TIMELINE', scrollTimes: 4 });
+    // Reload the page so content scripts install at document_start and the
+    // page's initial timeline fetches are captured — this removes any
+    // dependency on the user reloading the extension/page in the right order
+    liveScanStatus.textContent = '正在刷新页面以获取精确数据...';
+    await chrome.tabs.reload(tab.id);
+    await waitForTabComplete(tab.id);
+    await sleep(1200); // let the initial timeline fetches fire
+
+    let response;
+    const scrollTimes = clampScanTimes(scanTimesInput.value);
+
+    // Ensure the MAIN-world sniffer is present (needed for exact API data).
+    // Idempotent: the script self-guards against double installation.
+    try {
+      await chrome.scripting.executeScript({
+        target: { tabId: tab.id },
+        files: ['content/queryid-sniffer.js'],
+        world: 'MAIN'
+      });
+    } catch (e) { /* DOM fallback still works without it */ }
+
+    try {
+      response = await chrome.tabs.sendMessage(tab.id, { type: 'SCAN_TIMELINE', scrollTimes });
+    } catch (err) {
+      // Tabs opened before the extension was installed/reloaded have no content script.
+      // Inject it on demand (activeTab grants this after clicking the extension), then retry.
+      if (!/Receiving end|message port/i.test(err.message)) throw err;
+      await chrome.scripting.executeScript({
+        target: { tabId: tab.id },
+        files: ['content/scanner.js']
+      });
+      response = await chrome.tabs.sendMessage(tab.id, { type: 'SCAN_TIMELINE', scrollTimes });
+    }
+
     if (response && response.success && response.tweets) {
-      rawTweets = response.tweets;
-      liveScanStatus.textContent = `扫描完成，共捕获 ${rawTweets.length} 条推文！`;
-      log(`在线扫描到 ${rawTweets.length} 条推文。`, 'success');
+      if (response.warning) {
+        log(`[警告] ${response.warning}`, 'warn');
+      }
+      // Normalize: sendMessage serializes Date -> ISO string, and live items
+      // have no engagement counts. Keep shapes identical to archive-parsed data.
+      const fresh = response.tweets.map(t => ({
+        ...t,
+        createdAt: t.createdAt instanceof Date ? t.createdAt : new Date(t.createdAt),
+        favoriteCount: t.favoriteCount ?? null,
+        retweetCount: t.retweetCount ?? null
+      }));
+      // Merge with previous scans (Posts tab + Replies tab runs accumulate);
+      // fresh data wins on ID conflicts
+      const merged = new Map(rawTweets.map(t => [t.id, t]));
+      for (const t of fresh) merged.set(t.id, t);
+      rawTweets = Array.from(merged.values());
+
+      const scopeText = response.scope === 'replies' ? '回复页' : '帖子页';
+      liveScanStatus.textContent =
+        `扫描完成 (${scopeText})：本次 ${fresh.length} 条，累计 ${rawTweets.length} 条。可切换另一标签页继续扫描。`;
+      log(`在线扫描到 ${fresh.length} 条推文 (${scopeText})，累计 ${rawTweets.length} 条。`, 'success');
+      log(`数据来源: ${response.mode === 'api' ? '接口精确数据 ✓（分类/计数准确）' : '页面解析兜底 — 请刷新 x.com 页面后重扫以获得精确数据'}`,
+        response.mode === 'api' ? 'info' : 'warn');
+      if (response.stats) {
+        const s = response.stats;
+        log(`[诊断] 可解析推文 ${s.articles} | 本人/转推 ${s.owned} | 判定为回复 ${s.replyLike} | 保留 ${s.kept}`, 'info');
+      }
+      if (response.sniff) {
+        const sf = response.sniff;
+        log(`[嗅探诊断] 接口模式数据 ${response.apiMapSize} 条 | 时间线响应 ${sf.timelineResponses} 次 | 解析推文 ${sf.tweetsExtracted} 条 | 看到的接口: ${sf.graphqlOps.join(', ') || '无'}`, 'info');
+      } else {
+        log(`[嗅探诊断] 嗅探器未捕获任何接口响应 (已自动刷新页面)，接口模式数据 ${response.apiMapSize} 条`, 'warn');
+      }
       updateCounts();
       applyFilters();
     } else {
@@ -330,12 +473,11 @@ async function handleStartExecution() {
 
   if (!confirm(confirmMsg)) return;
 
-  if (!client) {
-    client = new XDeletionClient({
-      ct0: activeSession?.ct0,
-      authToken: activeSession?.authToken
-    });
-  }
+  await ensureClientReady();
+
+  // Persist checkpoint so the run survives tab/browser close (resume later)
+  await createCheckpoint(matchedTweets, { dryRun: isDryRun });
+  resumeBar.style.display = 'none';
 
   // Reset Metrics
   countSuccess = 0;
@@ -346,9 +488,182 @@ async function handleStartExecution() {
   progressWrapper.style.display = 'block';
   mainActionBtn.disabled = true;
 
-  engine = new DeletionEngine({
+  engine = buildEngine(isDryRun);
+  engine.setQueue(matchedTweets);
+  log(`开始执行清理任务 (共 ${matchedTweets.length} 项)...`, 'info');
+  await engine.start();
+}
+
+/** Ensures the API client exists and applies page-captured queryIds. */
+async function ensureClientReady() {
+  if (!client) {
+    client = new XDeletionClient({
+      ct0: activeSession?.ct0,
+      authToken: activeSession?.authToken
+    });
+  }
+
+  // Follow X's live queryId rotations captured from the page (queryid-sniffer.js).
+  // Capturing requires the user to have manually deleted one tweet on x.com
+  // with the extension active; the learned IDs then persist in local storage.
+  const captured = {};
+  try {
+    const stored = await chrome.storage.local.get(['queryId_DeleteTweet', 'queryId_DeleteRetweet']);
+    if (stored.queryId_DeleteTweet) captured.DeleteTweet = stored.queryId_DeleteTweet;
+    if (stored.queryId_DeleteRetweet) captured.DeleteRetweet = stored.queryId_DeleteRetweet;
+  } catch (e) { /* fall back to defaults */ }
+  if (Object.keys(captured).length > 0) {
+    client.setQueryIds(captured);
+    log('已自动学习页面最新接口参数 (queryId)，自动适配 X 改版。', 'info');
+  } else {
+    log('未捕获到页面接口参数，使用内置默认值。若删除报 404，请先在 x.com 上手动删除一条推文，扩展会自动学习最新参数。', 'warn');
+  }
+}
+
+/** Persists the queryIds just used successfully, so future runs use them. */
+function persistQueryIds() {
+  if (!client) return;
+  try {
+    chrome.storage.local.set({
+      queryId_DeleteTweet: client.queryIds.DeleteTweet,
+      queryId_DeleteRetweet: client.queryIds.DeleteRetweet
+    });
+  } catch (e) { /* ignore */ }
+}
+
+// --- Unfollow tool (learning-based replay) ---
+
+async function handleLoadFollowing() {
+  loadFollowingBtn.disabled = true;
+  loadFollowingBtn.textContent = '⏳ 读取中...';
+  followingStatus.textContent = '正在从页面缓冲区读取...';
+
+  try {
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    if (!tab || (!tab.url.includes('x.com') && !tab.url.includes('twitter.com'))) {
+      throw new Error('请先打开 x.com 的「关注」列表页再读取');
+    }
+
+    let resp;
+    try {
+      resp = await chrome.tabs.sendMessage(tab.id, { type: 'SCAN_FOLLOWING' });
+    } catch (err) {
+      if (!/Receiving end|message port/i.test(err.message)) throw err;
+      await chrome.scripting.executeScript({
+        target: { tabId: tab.id },
+        files: ['content/scanner.js']
+      });
+      resp = await chrome.tabs.sendMessage(tab.id, { type: 'SCAN_FOLLOWING' });
+    }
+
+    followingUsers = (resp && resp.users) || [];
+    unfollowMutation = (resp && resp.followMutation) || null;
+
+    if (followingUsers.length === 0) {
+      followingStatus.textContent = '未捕获到关注列表。请打开「关注」列表页并刷新页面后重试。';
+    } else if (!unfollowMutation) {
+      followingStatus.textContent =
+        `已捕获 ${followingUsers.length} 个关注，但取关接口未学习——请先手动取关 1 人，再点「读取」。`;
+    } else {
+      followingStatus.textContent =
+        `已捕获 ${followingUsers.length} 个关注，取关接口已学习 ✓（演示接口: ${unfollowMutation.opName}）`;
+    }
+    unfollowBtn.disabled = !(followingUsers.length > 0 && unfollowMutation);
+    unfollowBtn.textContent = `🚫 开始取关 ${followingUsers.length} 人`;
+  } catch (err) {
+    followingStatus.textContent = `读取失败: ${err.message}`;
+    log(`取关读取异常: ${err.message}`, 'error');
+  } finally {
+    loadFollowingBtn.disabled = false;
+    loadFollowingBtn.textContent = '📋 读取已捕获的关注列表';
+  }
+}
+
+async function handleStartUnfollow() {
+  if (unfollowRunning || followingUsers.length === 0 || !unfollowMutation) return;
+  if (!activeSession) {
+    alert('未检测到 x.com 登录，无法取关！');
+    return;
+  }
+
+  const confirmMsg = `确定要取消关注 ${followingUsers.length} 人吗？\n\n每次间隔约 3-6 秒，中途可随时关闭弹窗停止。`;
+  if (!confirm(confirmMsg)) return;
+
+  if (!client) {
+    client = new XDeletionClient({
+      ct0: activeSession?.ct0,
+      authToken: activeSession?.authToken
+    });
+  }
+
+  // Locate the target-id field in the learned template (no guessed names:
+  // whatever user-id field the page used, we swap exactly that one)
+  let parsedBody;
+  let idField = null;
+  let oldValue = null;
+  try {
+    parsedBody = JSON.parse(unfollowMutation.bodyText);
+    for (const [k, v] of Object.entries(parsedBody.variables || {})) {
+      if (typeof v === 'string' && /^\d{6,}$/.test(v)) {
+        idField = k;
+        oldValue = v;
+        break;
+      }
+    }
+  } catch (e) { /* handled below */ }
+  if (!idField) {
+    alert('未能从学习的请求中识别目标用户字段，取关终止。');
+    return;
+  }
+
+  unfollowRunning = true;
+  unfollowBtn.disabled = true;
+  let ok = 0;
+  let fail = 0;
+
+  for (const u of followingUsers) {
+    try {
+      const body = JSON.stringify({
+        ...parsedBody,
+        variables: { ...parsedBody.variables, [idField]: u.id }
+      });
+      const res = await fetch(unfollowMutation.url, {
+        method: 'POST',
+        credentials: 'include',
+        headers: client.getHeaders(),
+        body
+      });
+      if (res.ok) {
+        ok++;
+        log(`[取关] 已取消关注 @${u.name}`, 'success');
+      } else if (res.status === 429) {
+        log('[取关] 触发频率限制，停止本次任务。稍后再来。', 'error');
+        break;
+      } else {
+        fail++;
+        log(`[取关] @${u.name} 失败 (HTTP ${res.status})`, 'error');
+      }
+    } catch (err) {
+      fail++;
+      log(`[取关] @${u.name} 异常: ${err.message}`, 'error');
+    }
+
+    unfollowBtn.textContent = `🚫 取关中 ${ok + fail}/${followingUsers.length}`;
+    await sleep(3000 + Math.random() * 3000);
+  }
+
+  unfollowRunning = false;
+  unfollowBtn.disabled = false;
+  unfollowBtn.textContent = `🚫 开始取关 ${followingUsers.length - ok} 人`;
+  followingUsers = followingUsers.slice(ok); // keep only unprocessed ones
+  log(`取关完成: 成功 ${ok}，失败 ${fail}。${fail > 0 ? '失败项可重新读取后再试。' : ''}`, fail > 0 ? 'warn' : 'success');
+}
+
+/** Builds the deletion engine with the shared UI wiring. */
+function buildEngine(dryRun) {
+  return new DeletionEngine({
     client,
-    dryRun: isDryRun,
+    dryRun,
     minDelayMs: 2000,
     maxDelayMs: 4000,
     batchSize: 60,
@@ -368,6 +683,23 @@ async function handleStartExecution() {
       pSucc.textContent = countSuccess;
       pAlready.textContent = countAlready;
       pFail.textContent = countFailed;
+      if (p.result.status === 'success') {
+        // Bootstrap queryId learning: SweepX's own requests are invisible to the
+        // page sniffer, so persist the IDs we just used successfully
+        persistQueryIds();
+      }
+      // Auto-remove completed items from the working set (real runs only —
+      // dry-run must leave the list intact for the real run afterwards)
+      if (p.result.status === 'success' || p.result.status === 'already_deleted') {
+        rawTweets = rawTweets.filter(t => t.id !== p.item.id);
+        updateCounts();
+        applyFilters();
+      }
+      saveProgress(p.current, {
+        success: countSuccess,
+        already: countAlready,
+        failed: countFailed
+      }).catch(() => {});
     },
     onStateChange: (s) => {
       pStatus.textContent = s.message || s.state;
@@ -382,6 +714,11 @@ async function handleStartExecution() {
         pauseRunBtn.disabled = true;
         stopRunBtn.disabled = true;
         hideCoolingBox();
+        if (s.state === EngineState.IDLE) {
+          // Run completed — checkpoint no longer needed
+          clearCheckpoint().catch(() => {});
+          log('任务完成。x.com 页面不会自动刷新，请刷新页面确认删除结果。', 'info');
+        }
       }
     },
     onError: (e) => {
@@ -391,9 +728,49 @@ async function handleStartExecution() {
       showCoolingBox(c.durationMs);
     }
   });
+}
 
+/** Resumes an interrupted run from the persisted checkpoint. */
+async function handleResumeExecution() {
+  const cp = await loadCheckpoint();
+  if (!cp) {
+    resumeBar.style.display = 'none';
+    return;
+  }
+
+  const remaining = cp.queue.length - cp.state.currentIndex;
+  const confirmResume = confirm(
+    `检测到未完成的清理任务：已处理 ${cp.state.currentIndex}/${cp.queue.length}，剩余 ${remaining} 项 (${cp.state.dryRun ? 'Dry-Run' : '真实删除'})。\n\n是否从上次中断处继续？`
+  );
+  if (!confirmResume) return;
+
+  if (!cp.state.dryRun && !activeSession) {
+    alert('未检测到有效的 x.com 登录凭据，无法继续真实删除！');
+    return;
+  }
+
+  matchedTweets = cp.queue;
+  dryRunCheck.checked = cp.state.dryRun;
+  await ensureClientReady();
+
+  // Restore metrics from checkpoint
+  countSuccess = cp.state.success;
+  countAlready = cp.state.already;
+  countFailed = cp.state.failed;
+
+  progressWrapper.style.display = 'block';
+  mainActionBtn.disabled = true;
+  resumeBar.style.display = 'none';
+
+  engine = buildEngine(cp.state.dryRun);
   engine.setQueue(matchedTweets);
-  log(`开始执行清理任务 (共 ${matchedTweets.length} 项)...`, 'info');
+  engine.currentIndex = cp.state.currentIndex;
+  updateProgressDisplay(cp.state.currentIndex, matchedTweets.length);
+  pSucc.textContent = countSuccess;
+  pAlready.textContent = countAlready;
+  pFail.textContent = countFailed;
+
+  log(`已恢复上次任务：从第 ${cp.state.currentIndex + 1} 项继续 (剩余 ${remaining} 项)。`, 'info');
   await engine.start();
 }
 
@@ -462,7 +839,7 @@ function handleExportCsv() {
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = `deleteX_backup_${new Date().toISOString().slice(0, 10)}.csv`;
+  a.download = `SweepX_backup_${new Date().toISOString().slice(0, 10)}.csv`;
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);

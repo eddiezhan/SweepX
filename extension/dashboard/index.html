@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>deleteX - 批量删除 X 发帖/转推/引用/回复 控制台</title>
+  <title>SweepX - 批量删除 X 发帖/转推/引用/回复 控制台</title>
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -11,8 +11,8 @@
     <!-- Top Bar -->
     <header class="top-nav">
       <div class="brand">
-        <span class="logo">delete<span class="highlight">X</span></span>
-        <span class="badge">v1.0.0</span>
+        <span class="logo">Sweep<span class="highlight">X</span></span>
+        <span class="badge">v1.2.0</span>
         <span class="badge badge-free">100% 免费 / 保护隐私</span>
       </div>
       <div class="session-box" id="session-status-box">
@@ -21,6 +21,15 @@
         <button id="refresh-session-btn" class="btn-sm">刷新凭据</button>
       </div>
     </header>
+
+    <!-- Resume Unfinished Task -->
+    <div id="resume-bar" class="resume-bar" style="display: none;">
+      <span id="resume-text" class="resume-text"></span>
+      <span class="resume-actions">
+        <button id="resume-btn" class="btn-sm">▶ 继续上次任务</button>
+        <button id="resume-discard-btn" class="btn-sm danger">✕ 放弃</button>
+      </span>
+    </div>
 
     <!-- Main Content -->
     <main class="main-content">
@@ -185,7 +194,7 @@
                 <button id="clear-log-btn" class="btn-xs">清屏</button>
               </div>
               <div class="log-console" id="log-console">
-                <div class="log-item info">[系统] deleteX 已启动，请先导入 tweets.js 数据文件。</div>
+                <div class="log-item info">[系统] SweepX 已启动，请先导入 tweets.js 数据文件。</div>
               </div>
             </div>
           </div>
@@ -218,6 +227,13 @@
         </div>
       </section>
     </main>
+
+    <footer class="donate-bar">
+      <span class="donate-text">SweepX 永久免费 · 本工具不联网上传任何数据 · 帮到你的话请喝杯咖啡</span>
+      <span class="donate-links">
+        <a href="https://afdian.com/a/eddiezhan" target="_blank" rel="noopener">⚡ 爱发电</a>
+      </span>
+    </footer>
   </div>
 
   <script type="module" src="dashboard.js"></script>

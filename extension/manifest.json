@@ -1,29 +1,47 @@
 {
   "manifest_version": 3,
-  "name": "deleteX - 批量删除 X 发帖/转推/引用/回复",
-  "version": "1.1.0",
+  "name": "SweepX - 批量删除 X 发帖/转推/引用/回复",
+  "version": "1.2.0",
   "description": "0 成本、保护隐私的 X (Twitter) 历史推文、转推、引用与回复批量清理工具",
   "permissions": [
     "cookies",
     "storage",
+    "unlimitedStorage",
     "activeTab",
+    "scripting",
     "sidePanel"
   ],
   "host_permissions": [
     "https://x.com/*",
     "https://twitter.com/*"
   ],
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
   "background": {
     "service_worker": "background.js"
   },
   "action": {
     "default_popup": "popup/popup.html",
-    "default_title": "deleteX 控制面板"
+    "default_title": "SweepX 控制面板",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
   },
   "side_panel": {
     "default_path": "popup/popup.html"
   },
   "content_scripts": [
+    {
+      "matches": ["https://x.com/*", "https://twitter.com/*"],
+      "js": ["content/queryid-sniffer.js"],
+      "run_at": "document_start",
+      "world": "MAIN"
+    },
     {
       "matches": ["https://x.com/*", "https://twitter.com/*"],
       "js": ["content/scanner.js"],

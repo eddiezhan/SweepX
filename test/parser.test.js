@@ -122,4 +122,34 @@ describe('Tweet Archive Parser & Classifier', () => {
     assert.ok(!ids.includes('1003'), 'Tweet containing excluded keyword should be preserved');
     assert.ok(ids.includes('1001'));
   });
+
+  it('should accept ISO string createdAt from live scan without throwing', () => {
+    // Regression: live-scan items carry createdAt as an ISO string (sendMessage
+    // serialization), which used to crash filterTweets on t.createdAt.getTime()
+    const liveTweets = [
+      { id: '3001', category: TweetCategory.ORIGINAL, text: 'live post', createdAt: new Date('2025-09-01T10:00:00Z').toISOString() },
+      { id: '3002', category: TweetCategory.RETWEET, text: 'RT @a: b', sourceTweetId: '3002', createdAt: new Date('2025-09-02T10:00:00Z').toISOString() }
+    ];
+
+    const filtered = filterTweets(liveTweets, {
+      categories: [TweetCategory.ORIGINAL, TweetCategory.RETWEET]
+    });
+    assert.equal(filtered.length, 2, 'Live-scan tweets should pass the category filter without TypeError');
+
+    const dateFiltered = filterTweets(liveTweets, {
+      endDate: new Date('2025-09-01T23:59:59Z')
+    });
+    assert.deepEqual(dateFiltered.map(t => t.id), ['3001'], 'endDate should also work against string createdAt');
+  });
+
+  it('should preserve live-scan tweets with unknown engagement counts when a keep threshold is set', () => {
+    // Regression: favoriteCount undefined used to bypass the keep rule (undefined >= N === false)
+    const liveTweets = [
+      { id: '4001', category: TweetCategory.ORIGINAL, text: 'unknown likes', createdAt: new Date() }
+    ];
+    const filtered = filterTweets(liveTweets, {
+      keepIfFavoriteGte: 10
+    });
+    assert.equal(filtered.length, 0, 'Unknown favoriteCount must be treated as protected (filtered out of deletion queue)');
+  });
 });

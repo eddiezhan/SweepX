@@ -2,7 +2,7 @@
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8">
-  <title>deleteX - 批量删除推文/转推/引用/回复</title>
+  <title>SweepX - 批量删除推文/转推/引用/回复</title>
   <link rel="stylesheet" href="popup.css">
 </head>
 <body>
@@ -10,7 +10,7 @@
     <!-- Top Header -->
     <header class="popup-header">
       <div class="brand">
-        <span class="logo">delete<span class="highlight">X</span></span>
+        <span class="logo">Sweep<span class="highlight">X</span></span>
         <span class="free-badge">免费/本地</span>
       </div>
       <div class="header-actions">
@@ -25,14 +25,52 @@
       <span id="session-text" class="session-text">检查登录状态中...</span>
     </div>
 
-    <!-- Mode Tabs -->
-    <div class="tabs-nav">
-      <button class="tab-btn active" id="tab-btn-zip" data-tab="tab-zip">📁 归档包 (全量/老数据)</button>
-      <button class="tab-btn" id="tab-btn-live" data-tab="tab-live">⚡ 在线扫描 (近期数据)</button>
+    <!-- Resume Unfinished Task -->
+    <div id="resume-bar" class="resume-bar" style="display: none;">
+      <span id="resume-text" class="resume-text"></span>
+      <span class="resume-actions">
+        <button id="resume-btn" class="btn-xs">▶ 继续</button>
+        <button id="resume-discard-btn" class="btn-xs danger">✕ 放弃</button>
+      </span>
     </div>
 
-    <!-- Tab 1: Zip / Archive Mode -->
-    <div class="tab-content active" id="tab-zip">
+    <!-- Mode Tabs -->
+    <div class="tabs-nav">
+      <button class="tab-btn active" id="tab-btn-live" data-tab="tab-live">⚡ 在线扫描 (近期数据)</button>
+      <button class="tab-btn" id="tab-btn-unfollow" data-tab="tab-unfollow">👥 批量取关</button>
+      <button class="tab-btn" id="tab-btn-zip" data-tab="tab-zip">📁 归档包 (全量/老数据)</button>
+    </div>
+
+    <!-- Tab: Live Online Scan Mode -->
+    <div class="tab-content active" id="tab-live">
+      <div class="live-scan-card">
+        <div class="live-desc">在当前打开的 x.com 个人主页上自动向下滚动扫描推文。适合清理近期数据，无需等待下载归档。<br>
+          <b>请先刷新 x.com 页面再扫描</b> —— 扫描直接读取页面加载的官方接口数据，分类和计数精确无误，且只包含你自己的内容。</div>
+        <div class="form-row">
+          <span>滚动扫描深度:</span>
+          <input type="number" id="scan-times-input" class="input-num" min="1" max="50" value="8" title="每次滚动约捕获 5-10 条，深度越大扫描越久">
+          <span class="scan-hint">次 (约 40-80 条)</span>
+        </div>
+        <button id="scan-page-btn" class="btn btn-secondary">🔍 自动扫描当前页面推文</button>
+        <div id="live-scan-status" class="scan-status-text">待扫描</div>
+      </div>
+    </div>
+
+    <!-- Tab: Unfollow Mode -->
+    <div class="tab-content" id="tab-unfollow">
+      <div class="live-scan-card">
+        <div class="live-desc">批量取消关注，接口通过「演示学习」获得，无需内置。<br>
+          ① 打开你的<b>「关注」列表页</b>（左侧导航 → 关注）<br>
+          ② <b>手动取关任意 1 人</b>（教会扩展取关接口，需要时再关注回去）<br>
+          ③ 下方点「读取」→「开始取关」。每次约 3-6 秒一个，太急会触发限制。</div>
+        <button id="load-following-btn" class="btn btn-secondary">📋 读取已捕获的关注列表</button>
+        <div id="following-status" class="scan-status-text">待读取</div>
+        <button id="unfollow-btn" class="btn btn-primary" disabled>🚫 开始取关 0 人</button>
+      </div>
+    </div>
+
+    <!-- Tab: Zip / Archive Mode -->
+    <div class="tab-content" id="tab-zip">
       <div class="drop-area" id="zip-drop-area">
         <div class="drop-icon">📦</div>
         <div class="drop-title">拖入推特 <code>.zip</code> 压缩包或 <code>tweets.js</code></div>
@@ -42,15 +80,6 @@
       <div class="file-stat-row">
         <span id="file-loaded-status" class="file-loaded-text">未加载归档包</span>
         <a href="https://x.com/settings/your_twitter_data" target="_blank" class="archive-link">如何申请官方 Zip? ↗</a>
-      </div>
-    </div>
-
-    <!-- Tab 2: Live Online Scan Mode -->
-    <div class="tab-content" id="tab-live">
-      <div class="live-scan-card">
-        <div class="live-desc">在当前打开的 x.com 个人主页上自动向下滚动扫描推文。适合清理近期数据，无需等待下载归档。</div>
-        <button id="scan-page-btn" class="btn btn-secondary">🔍 自动扫描当前页面推文</button>
-        <div id="live-scan-status" class="scan-status-text">待扫描</div>
       </div>
     </div>
 
@@ -146,6 +175,14 @@
       <div class="log-line info">[提示] 拖入 Twitter 官方归档 .zip 压缩包或点击在线扫描即可开始。</div>
     </div>
   </div>
+
+  <!-- Donation -->
+  <footer class="donate-bar">
+    <span class="donate-text">SweepX 永久免费 · 帮到你的话请喝杯咖啡</span>
+    <span class="donate-links">
+      <a href="https://afdian.com/a/eddiezhan" target="_blank" rel="noopener">⚡ 爱发电</a>
+    </span>
+  </footer>
 
   <!-- Libs & Modules -->
   <script src="../libs/jszip.min.js"></script>

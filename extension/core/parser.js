@@ -1,5 +1,5 @@
 /**
- * deleteX - Core Tweet Archive Parser & Classifier
+ * SweepX - Core Tweet Archive Parser & Classifier
  * 
  * Accurately classifies X (Twitter) archive items into:
  * 1. original (原创发帖)
@@ -175,21 +175,24 @@ export function filterTweets(tweets, options = {}) {
     }
 
     // 2. Date range check
-    const tweetTs = t.createdAt.getTime();
-    if (startTs !== null && tweetTs < startTs) {
+    // createdAt may be a Date (archive parse) or an ISO string (live scan via sendMessage serialization)
+    const created = t.createdAt instanceof Date ? t.createdAt : new Date(t.createdAt);
+    const tweetTs = created.getTime();
+    if (startTs !== null && !Number.isNaN(tweetTs) && tweetTs < startTs) {
       return false;
     }
-    if (endTs !== null && tweetTs > endTs) {
+    if (endTs !== null && !Number.isNaN(tweetTs) && tweetTs > endTs) {
       return false;
     }
 
     // 3. Keep high-engagement tweets (Likes)
-    if (keepIfFavoriteGte !== null && keepIfFavoriteGte !== undefined && t.favoriteCount >= keepIfFavoriteGte) {
+    // If the count is unknown (e.g. live scan), treat it as protected — never delete blindly
+    if (keepIfFavoriteGte != null && (t.favoriteCount == null || t.favoriteCount >= keepIfFavoriteGte)) {
       return false; // preserved
     }
 
     // 4. Keep high-engagement tweets (Retweets)
-    if (keepIfRetweetGte !== null && keepIfRetweetGte !== undefined && t.retweetCount >= keepIfRetweetGte) {
+    if (keepIfRetweetGte != null && (t.retweetCount == null || t.retweetCount >= keepIfRetweetGte)) {
       return false; // preserved
     }
 

@@ -1,5 +1,5 @@
 {
-  "name": "deletex",
+  "name": "sweepx",
   "version": "1.0.0",
   "description": "Zero-cost, privacy-first batch deleter for X (Twitter) posts, retweets, quotes, and replies.",
   "type": "module",

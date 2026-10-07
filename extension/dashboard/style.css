@@ -524,3 +524,55 @@ body {
 .type-pill.retweet { background: rgba(0, 186, 124, 0.2); color: var(--retweet-color); }
 .type-pill.quote { background: rgba(163, 113, 247, 0.2); color: var(--quote-color); }
 .type-pill.reply { background: rgba(245, 158, 11, 0.2); color: var(--reply-color); }
+
+/* Donation Bar */
+.donate-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 24px;
+  border-top: 1px solid var(--border, #2f3336);
+  font-size: 12px;
+  color: #71767b;
+}
+
+.donate-links a {
+  color: #1d9bf0;
+  text-decoration: none;
+  margin-left: 12px;
+  font-weight: 600;
+}
+
+.donate-links a:hover {
+  text-decoration: underline;
+}
+
+/* Resume Bar */
+.resume-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 0 24px 16px;
+  padding: 12px 16px;
+  background: rgba(255, 193, 7, 0.08);
+  border: 1px solid rgba(255, 193, 7, 0.35);
+  border-radius: 10px;
+  font-size: 13px;
+}
+
+.resume-text {
+  color: #f0b429;
+  line-height: 1.5;
+}
+
+.resume-actions {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.resume-actions .danger {
+  color: #f4212e;
+}

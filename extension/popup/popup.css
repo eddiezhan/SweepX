@@ -246,6 +246,65 @@ body {
   margin-top: 8px;
 }
 
+.scan-hint {
+  font-size: 11px;
+  color: var(--text-sub);
+  margin-left: 4px;
+}
+
+/* Resume Bar */
+.resume-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 10px;
+  padding: 8px 10px;
+  background: rgba(255, 193, 7, 0.08);
+  border: 1px solid rgba(255, 193, 7, 0.35);
+  border-radius: 8px;
+  font-size: 11px;
+}
+
+.resume-text {
+  color: #f0b429;
+  line-height: 1.4;
+}
+
+.resume-actions {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.resume-actions .btn-xs.danger {
+  color: #f4212e;
+}
+
+/* Donation Bar */
+.donate-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 10px;
+  padding: 8px 10px;
+  border-top: 1px solid var(--border, #2f3336);
+  font-size: 11px;
+  color: var(--text-sub);
+}
+
+.donate-links a {
+  color: #1d9bf0;
+  text-decoration: none;
+  margin-left: 8px;
+  font-weight: 600;
+}
+
+.donate-links a:hover {
+  text-decoration: underline;
+}
+
 /* Section Card */
 .section-card {
   background: var(--bg-card);
