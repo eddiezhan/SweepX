@@ -139,8 +139,9 @@ function renderFollowingList() {
     cb.addEventListener('change', updateFollowingSelection);
     const span = document.createElement('span');
     span.className = 'following-name';
-    span.textContent = `@${u.name}`;
-    span.title = `@${u.name} (${u.id})`;
+    const label = u.displayName ? `${u.displayName} (@${u.name})` : `@${u.name}`;
+    span.textContent = label;
+    span.title = `${label} · ID ${u.id}`;
     row.appendChild(cb);
     row.appendChild(span);
     followingItemsBox.appendChild(row);

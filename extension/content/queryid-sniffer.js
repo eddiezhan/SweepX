@@ -120,10 +120,16 @@
     // User entries (following/followers lists) — buffer for the unfollow tool
     const userEntry = itemContent && itemContent.user_results && itemContent.user_results.result;
     if (userEntry && userEntry.rest_id) {
-      const uname = (userEntry.legacy && userEntry.legacy.screen_name)
-        || (userEntry.core && userEntry.core.screen_name) || '';
+      const uLegacy = userEntry.legacy || {};
+      const uCore = userEntry.core || {};
+      const uname = uLegacy.screen_name || uCore.screen_name || '';
+      const displayName = uLegacy.name || uCore.name || '';
       if (uname) {
-        followBuffer.users.set(userEntry.rest_id, { id: userEntry.rest_id, name: uname });
+        followBuffer.users.set(userEntry.rest_id, {
+          id: userEntry.rest_id,
+          name: uname,
+          displayName
+        });
       }
       return;
     }
