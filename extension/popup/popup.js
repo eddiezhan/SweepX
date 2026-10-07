@@ -40,8 +40,10 @@ const openFullBtn = document.getElementById('open-full-btn');
 
 const tabBtnZip = document.getElementById('tab-btn-zip');
 const tabBtnLive = document.getElementById('tab-btn-live');
+const tabBtnUnfollow = document.getElementById('tab-btn-unfollow');
 const tabZip = document.getElementById('tab-zip');
 const tabLive = document.getElementById('tab-live');
+const tabUnfollow = document.getElementById('tab-unfollow');
 
 const zipDropArea = document.getElementById('zip-drop-area');
 const zipFileInput = document.getElementById('zip-file-input');
@@ -140,6 +142,7 @@ function bindEvents() {
   // Tabs
   tabBtnZip.addEventListener('click', () => switchTab('zip'));
   tabBtnLive.addEventListener('click', () => switchTab('live'));
+  tabBtnUnfollow.addEventListener('click', () => switchTab('unfollow'));
 
   // Header Actions
   openFullBtn.addEventListener('click', () => {
@@ -209,16 +212,15 @@ function bindEvents() {
 }
 
 function switchTab(mode) {
-  if (mode === 'zip') {
-    tabBtnZip.classList.add('active');
-    tabBtnLive.classList.remove('active');
-    tabZip.classList.add('active');
-    tabLive.classList.remove('active');
-  } else {
-    tabBtnLive.classList.add('active');
-    tabBtnZip.classList.remove('active');
-    tabLive.classList.add('active');
-    tabZip.classList.remove('active');
+  const tabs = {
+    zip: [tabBtnZip, tabZip],
+    live: [tabBtnLive, tabLive],
+    unfollow: [tabBtnUnfollow, tabUnfollow]
+  };
+  for (const [key, [btn, content]] of Object.entries(tabs)) {
+    const active = key === mode;
+    btn.classList.toggle('active', active);
+    content.classList.toggle('active', active);
   }
 }
 
