@@ -104,6 +104,7 @@ const followingSelectedCount = document.getElementById('following-selected-count
 let followingUsers = [];
 let unfollowMutation = null;
 let unfollowRunning = false;
+let followMutationCandidates = []; // learned request templates (newest last)
 
 function getSelectedFollowing() {
   const ids = new Set(
@@ -269,8 +270,8 @@ function bindEvents() {
   resumeDiscardBtn.addEventListener('click', handleDiscardCheckpoint);
 
   // Unfollow
-  loadFollowingBtn.addEventListener('click', handleLoadFollowing);
-  unfollowBtn.addEventListener('click', handleStartUnfollow);
+  loadFollowingBtn.addEventListener('click', () => handleLoadFollowing().catch(err => log(`[取关] 读取异常: ${err.message}`, 'error')));
+  unfollowBtn.addEventListener('click', () => handleStartUnfollow().catch(err => log(`[取关] 异常: ${err.message}`, 'error')));
   followingCheckAll.addEventListener('change', () => {
     const checked = followingCheckAll.checked;
     followingItemsBox.querySelectorAll('input[type="checkbox"]').forEach(cb => { cb.checked = checked; });
@@ -639,6 +640,7 @@ async function handleLoadFollowing() {
 
     // Auto-promote any recent POST that looks like an unfollow into a candidate
     const cands = ((resp && resp.mutationCandidates) || []).slice();
+    followMutationCandidates = cands;
     const posts = (resp && resp.recentPosts) || [];
     for (const p of posts) {
       if (/destroy|unfollow/i.test(p.url) && !cands.some(c => c.url === p.url && c.bodyText === p.body)) {
@@ -709,11 +711,11 @@ async function handleStartUnfollow() {
   // Locate the target-id field in the learned template. Two body shapes exist:
   // JSON (GraphQL mutations) and form-encoded (v1.1 friendships/destroy).
   // No guessed names — whatever field carried the demo target, we swap that one.
-  // Try candidates in order (destroy/unfollow-ish first, full bodies before
-  // log snippets) until one yields the target field.
+  // Try candidates in order (the chosen one first, then the rest) until one
+  // yields the target field.
   const tryOrder = [
-    ...cands.filter(c => /destroy|unfollow/i.test(c.opName)),
-    ...cands.filter(c => !/destroy|unfollow/i.test(c.opName))
+    unfollowMutation,
+    ...followMutationCandidates.filter(c => c !== unfollowMutation)
   ];
   let parsedBody = null;
   let formParams = null;
