@@ -87,6 +87,30 @@ const resumeText = document.getElementById('resume-text');
 const resumeBtn = document.getElementById('resume-btn');
 const resumeDiscardBtn = document.getElementById('resume-discard-btn');
 
+// Dashboard tabs & live features
+const dashTabBtnArchive = document.getElementById('dash-tab-btn-archive');
+const dashTabBtnLive = document.getElementById('dash-tab-btn-live');
+const dashTabBtnUnfollow = document.getElementById('dash-tab-btn-unfollow');
+const dashTabArchive = document.getElementById('dash-tab-archive');
+const dashTabLive = document.getElementById('dash-tab-live');
+const dashTabUnfollow = document.getElementById('dash-tab-unfollow');
+const dashScanBtn = document.getElementById('dash-scan-btn');
+const dashScanDepth = document.getElementById('dash-scan-depth');
+const dashScanStatus = document.getElementById('dash-scan-status');
+const dashLoadFollowingBtn = document.getElementById('dash-load-following-btn');
+const dashUnfollowBtn = document.getElementById('dash-unfollow-btn');
+const dashFollowingStatus = document.getElementById('dash-following-status');
+const dashFollowingList = document.getElementById('dash-following-list');
+const dashFollowingItems = document.getElementById('dash-following-items');
+const dashFollowingCheckAll = document.getElementById('dash-following-check-all');
+const dashFollowingSelectedCount = document.getElementById('dash-following-selected-count');
+
+// Unfollow state (dashboard)
+let dashFollowingUsers = [];
+let dashUnfollowMutation = null;
+let dashUnfollowRunning = false;
+let dashFollowMutationCandidates = [];
+
 // --- Initialization ---
 init();
 
@@ -159,6 +183,23 @@ function bindEvents() {
   // Checkpoint Resume
   resumeBtn.addEventListener('click', handleResume);
   resumeDiscardBtn.addEventListener('click', handleDiscardCheckpoint);
+
+  // Dashboard tabs
+  dashTabBtnArchive.addEventListener('click', () => switchDashTab('archive'));
+  dashTabBtnLive.addEventListener('click', () => switchDashTab('live'));
+  dashTabBtnUnfollow.addEventListener('click', () => switchDashTab('unfollow'));
+
+  // Live scan (dashboard)
+  dashScanBtn.addEventListener('click', () => handleDashLiveScan().catch(err => appendLog(`[扫描] 异常: ${err.message}`, 'error')));
+
+  // Unfollow (dashboard)
+  dashLoadFollowingBtn.addEventListener('click', () => handleDashLoadFollowing().catch(err => appendLog(`[取关] 读取异常: ${err.message}`, 'error')));
+  dashUnfollowBtn.addEventListener('click', () => handleDashStartUnfollow().catch(err => appendLog(`[取关] 异常: ${err.message}`, 'error')));
+  dashFollowingCheckAll.addEventListener('change', () => {
+    const checked = dashFollowingCheckAll.checked;
+    dashFollowingItems.querySelectorAll('input[type="checkbox"]').forEach(cb => { cb.checked = checked; });
+    updateDashFollowingSelection();
+  });
 }
 
 // --- Resume unfinished run (checkpoint) ---
@@ -607,4 +648,304 @@ function escapeHtml(str) {
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;');
+}
+
+// --- Dashboard mode tabs ---
+function switchDashTab(mode) {
+  const tabs = {
+    archive: [dashTabBtnArchive, dashTabArchive],
+    live: [dashTabBtnLive, dashTabLive],
+    unfollow: [dashTabBtnUnfollow, dashTabUnfollow]
+  };
+  for (const [key, [btn, content]] of Object.entries(tabs)) {
+    const active = key === mode;
+    btn.classList.toggle('active', active);
+    content.classList.toggle('active', active);
+  }
+}
+
+function sleep(ms) {
+  return new Promise(r => setTimeout(r, ms));
+}
+
+async function findXComTab() {
+  const tabs = await chrome.tabs.query({ url: ['https://x.com/*', 'https://twitter.com/*'] });
+  if (!tabs || tabs.length === 0) {
+    throw new Error('未找到打开的 x.com 标签页——请先打开 x.com 并刷新一次');
+  }
+  return tabs[0];
+}
+
+// --- Live scan (dashboard) ---
+async function handleDashLiveScan() {
+  dashScanBtn.disabled = true;
+  dashScanStatus.textContent = '正在准备扫描...';
+
+  try {
+    const tab = await findXComTab();
+    appendLog(`[扫描] 目标标签页: ${tab.url}`, 'info');
+
+    dashScanStatus.textContent = '正在刷新 x.com 页面以获取精确数据...';
+    await chrome.tabs.reload(tab.id);
+    const start = Date.now();
+    while (Date.now() - start < 15000) {
+      const t = await chrome.tabs.get(tab.id);
+      if (t.status === 'complete') break;
+      await sleep(300);
+    }
+    await sleep(1200);
+
+    try {
+      await chrome.scripting.executeScript({
+        target: { tabId: tab.id },
+        files: ['content/queryid-sniffer.js'],
+        world: 'MAIN'
+      });
+    } catch (e) { /* fallback below */ }
+
+    let response;
+    const scrollTimes = Math.max(1, Math.min(50, parseInt(dashScanDepth.value, 10) || 8));
+    try {
+      response = await chrome.tabs.sendMessage(tab.id, { type: 'SCAN_TIMELINE', scrollTimes });
+    } catch (err) {
+      if (!/Receiving end|message port/i.test(err.message)) throw err;
+      await chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ['content/scanner.js'] });
+      response = await chrome.tabs.sendMessage(tab.id, { type: 'SCAN_TIMELINE', scrollTimes });
+    }
+
+    if (response && response.success && response.tweets) {
+      const fresh = response.tweets.map(t => ({
+        ...t,
+        createdAt: t.createdAt instanceof Date ? t.createdAt : new Date(t.createdAt),
+        favoriteCount: t.favoriteCount ?? null,
+        retweetCount: t.retweetCount ?? null
+      }));
+      const merged = new Map(rawTweets.map(t => [t.id, t]));
+      for (const t of fresh) merged.set(t.id, t);
+      rawTweets = Array.from(merged.values());
+
+      appendLog(`[扫描] 本次 ${fresh.length} 条，累计 ${rawTweets.length} 条 (${response.mode === 'api' ? '接口精确数据 ✓' : '页面解析兜底'})`,
+        response.mode === 'api' ? 'success' : 'warn');
+      updateOverviewStats();
+      applyFilters();
+      dashScanStatus.textContent = `扫描完成：本次 ${fresh.length} 条，累计 ${rawTweets.length} 条。可在归档页查看预览并执行删除。`;
+    } else {
+      throw new Error('扫描结果为空');
+    }
+  } finally {
+    dashScanBtn.disabled = false;
+  }
+}
+
+// --- Unfollow (dashboard) ---
+
+function getDashSelectedFollowing() {
+  const ids = new Set(
+    Array.from(dashFollowingItems.querySelectorAll('input[type="checkbox"]:checked')).map(cb => cb.dataset.id)
+  );
+  return dashFollowingUsers.filter(u => ids.has(u.id));
+}
+
+function updateDashFollowingSelection() {
+  const selected = getDashSelectedFollowing();
+  dashFollowingSelectedCount.textContent = `已选 ${selected.length} / ${dashFollowingUsers.length}`;
+  dashUnfollowBtn.textContent = `🚫 开始取关 ${selected.length} 人`;
+  dashUnfollowBtn.disabled = dashUnfollowRunning || selected.length === 0 || !dashUnfollowMutation;
+  dashFollowingCheckAll.checked = dashFollowingUsers.length > 0 && selected.length === dashFollowingUsers.length;
+}
+
+function renderDashFollowingList() {
+  if (dashFollowingUsers.length === 0) {
+    dashFollowingList.style.display = 'none';
+    dashFollowingItems.innerHTML = '';
+    updateDashFollowingSelection();
+    return;
+  }
+  dashFollowingList.style.display = 'block';
+  dashFollowingItems.innerHTML = '';
+  for (const u of dashFollowingUsers) {
+    const row = document.createElement('label');
+    row.className = 'following-item';
+    const cb = document.createElement('input');
+    cb.type = 'checkbox';
+    cb.checked = true;
+    cb.dataset.id = u.id;
+    cb.addEventListener('change', updateDashFollowingSelection);
+    const span = document.createElement('span');
+    span.className = 'following-name';
+    const label = u.displayName ? `${u.displayName} (@${u.name})` : `@${u.name}`;
+    span.textContent = label;
+    span.title = `${label} · ID ${u.id}`;
+    row.appendChild(cb);
+    row.appendChild(span);
+    dashFollowingItems.appendChild(row);
+  }
+  updateDashFollowingSelection();
+}
+
+function pickUnfollowMutation(candidates) {
+  if (!Array.isArray(candidates) || candidates.length === 0) return null;
+  return candidates.find(m => /unfollow|destroy/i.test(m.opName)) || candidates[candidates.length - 1] || null;
+}
+
+async function handleDashLoadFollowing() {
+  dashLoadFollowingBtn.disabled = true;
+  dashFollowingStatus.textContent = '正在从页面缓冲区读取...';
+
+  try {
+    const tab = await findXComTab();
+    let resp;
+    try {
+      resp = await chrome.tabs.sendMessage(tab.id, { type: 'SCAN_FOLLOWING' });
+    } catch (err) {
+      if (!/Receiving end|message port/i.test(err.message)) throw err;
+      await chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ['content/scanner.js'] });
+      resp = await chrome.tabs.sendMessage(tab.id, { type: 'SCAN_FOLLOWING' });
+    }
+
+    dashFollowingUsers = (resp && resp.users) || [];
+    const cands = ((resp && resp.mutationCandidates) || []).slice();
+    dashFollowMutationCandidates = cands;
+    dashUnfollowMutation = pickUnfollowMutation(cands);
+
+    const posts = (resp && resp.recentPosts) || [];
+    if (cands.length > 0) {
+      appendLog(`[取关候选] ${cands.map(c => c.opName).join(', ')}`, 'info');
+    } else {
+      appendLog('[取关候选] 无 —— 请在「关注」页刷新后手动取关 1 人再读取。', 'warn');
+    }
+    if (posts.length > 0) {
+      appendLog(`[最近POST] 共 ${posts.length} 条（最新在上）:`, 'info');
+      for (const p of posts.slice(-6).reverse()) {
+        appendLog(`  ↳ ${p.url.slice(0, 110)}`, 'info');
+        appendLog(`    body: ${p.body.slice(0, 140)}`, 'info');
+      }
+    }
+
+    if (dashFollowingUsers.length === 0) {
+      dashFollowingStatus.textContent = '未捕获到关注列表。请打开「关注」列表页并刷新页面后重试。';
+    } else if (!dashUnfollowMutation) {
+      dashFollowingStatus.textContent = `已捕获 ${dashFollowingUsers.length} 个关注，但取关接口未学习——请先手动取关 1 人，再点「读取」。`;
+    } else {
+      dashFollowingStatus.textContent = `已捕获 ${dashFollowingUsers.length} 个关注，取关接口已学习 ✓（${dashUnfollowMutation.opName}）`;
+    }
+    dashUnfollowBtn.disabled = false;
+    renderDashFollowingList();
+  } finally {
+    dashLoadFollowingBtn.disabled = false;
+  }
+}
+
+async function handleDashStartUnfollow() {
+  const selected = getDashSelectedFollowing();
+  if (dashUnfollowRunning || selected.length === 0 || !dashUnfollowMutation) return;
+  if (!activeSession) {
+    alert('未检测到 x.com 登录，无法取关！');
+    return;
+  }
+  if (!client) initClient();
+
+  if (!confirm(`确定要取消关注选中的 ${selected.length} 人吗？\n\n每次间隔约 3-6 秒。`)) return;
+
+  const tryOrder = [
+    dashUnfollowMutation,
+    ...dashFollowMutationCandidates.filter(c => c !== dashUnfollowMutation)
+  ];
+  let parsedBody = null;
+  let formParams = null;
+  let isJsonBody = false;
+  let idField = null;
+  let swapWith = null;
+  let learnedFrom = null;
+
+  function extractTargetField(bodyText) {
+    try {
+      const raw = String(bodyText || '').trim();
+      if (raw.startsWith('{')) {
+        const parsed = JSON.parse(raw);
+        for (const [k, v] of Object.entries(parsed.variables || {})) {
+          if (typeof v !== 'string' || !v) continue;
+          if (/^\d{6,}$/.test(v)) return { parsedBody: parsed, isJsonBody: true, idField: k, swapWith: 'id' };
+          if (/screen_name/i.test(k)) return { parsedBody: parsed, isJsonBody: true, idField: k, swapWith: 'name' };
+        }
+      } else {
+        const params = new URLSearchParams(raw);
+        for (const [k, v] of params.entries()) {
+          if (!v) continue;
+          if (/^\d{6,}$/.test(v)) return { formParams: params, isJsonBody: false, idField: k, swapWith: 'id' };
+          if (/screen_name/i.test(k)) return { formParams: params, isJsonBody: false, idField: k, swapWith: 'name' };
+        }
+      }
+    } catch (e) { /* fall through */ }
+    return null;
+  }
+
+  for (const cand of tryOrder) {
+    const res = extractTargetField(cand.bodyText);
+    if (res) {
+      parsedBody = res.parsedBody || null;
+      formParams = res.formParams || null;
+      isJsonBody = res.isJsonBody;
+      idField = res.idField;
+      swapWith = res.swapWith;
+      learnedFrom = cand;
+      break;
+    }
+  }
+  if (!idField) {
+    alert(`未能从学习的请求中识别目标用户字段，取关终止。已尝试候选数: ${tryOrder.length}`);
+    return;
+  }
+  appendLog(`[取关] 已识别目标字段: ${idField}，模板来源: ${learnedFrom.opName}`, 'info');
+
+  dashUnfollowRunning = true;
+  dashUnfollowBtn.disabled = true;
+  let ok = 0;
+  let fail = 0;
+  const unfollowedIds = new Set();
+
+  for (const u of selected) {
+    try {
+      let body;
+      if (isJsonBody) {
+        body = JSON.stringify({
+          ...parsedBody,
+          variables: { ...parsedBody.variables, [idField]: swapWith === 'id' ? u.id : u.name }
+        });
+      } else {
+        formParams.set(idField, swapWith === 'id' ? u.id : u.name);
+        body = formParams.toString();
+      }
+      const headers = client.getHeaders();
+      headers['content-type'] = isJsonBody ? 'application/json' : 'application/x-www-form-urlencoded';
+      const res = await fetch(learnedFrom.url, {
+        method: 'POST',
+        credentials: 'include',
+        headers,
+        body
+      });
+      if (res.ok) {
+        ok++;
+        unfollowedIds.add(u.id);
+        appendLog(`[取关] 已取消关注 @${u.name}`, 'success');
+      } else if (res.status === 429) {
+        appendLog('[取关] 触发频率限制，停止本次任务。', 'error');
+        break;
+      } else {
+        fail++;
+        appendLog(`[取关] @${u.name} 失败 (HTTP ${res.status})`, 'error');
+      }
+    } catch (err) {
+      fail++;
+      appendLog(`[取关] @${u.name} 异常: ${err.message}`, 'error');
+    }
+
+    dashUnfollowBtn.textContent = `🚫 取关中 ${ok + fail}/${selected.length}`;
+    await sleep(3000 + Math.random() * 3000);
+  }
+
+  dashUnfollowRunning = false;
+  dashFollowingUsers = dashFollowingUsers.filter(u => !unfollowedIds.has(u.id));
+  renderDashFollowingList();
+  appendLog(`取关完成: 成功 ${ok}，失败 ${fail}。`, fail > 0 ? 'warn' : 'success');
 }

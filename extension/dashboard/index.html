@@ -33,6 +33,14 @@
 
     <!-- Main Content -->
     <main class="main-content">
+      <!-- Mode Tabs -->
+      <nav class="dash-tabs">
+        <button class="dash-tab-btn active" id="dash-tab-btn-archive">📁 归档清理 (全量)</button>
+        <button class="dash-tab-btn" id="dash-tab-btn-live">⚡ 在线扫描 (近期)</button>
+        <button class="dash-tab-btn" id="dash-tab-btn-unfollow">👥 批量取关</button>
+      </nav>
+
+      <div id="dash-tab-archive" class="dash-tab active">
       <!-- Overview Stat Cards -->
       <section class="stats-grid">
         <div class="stat-card">
@@ -224,6 +232,56 @@
               </tr>
             </tbody>
           </table>
+        </div>
+      </section>
+      </div>
+
+      <!-- Tab: Live Scan -->
+      <div id="dash-tab-live" class="dash-tab">
+        <section class="panel-card full-width">
+          <div class="table-header-row">
+            <h3>⚡ 在线扫描 — 直接读取页面加载的官方接口数据</h3>
+          </div>
+          <div class="live-scan-row">
+            <span>滚动深度:</span>
+            <input type="number" id="dash-scan-depth" min="1" max="50" value="8" class="input-text-sm">
+            <span>次（每次约 5-10 条）</span>
+            <button id="dash-scan-btn" class="btn btn-primary">🔍 扫描 x.com 页面</button>
+          </div>
+          <div id="dash-scan-status" class="file-info-text">请先在浏览器打开 x.com 个人主页（「帖子」或「回复」页均可），然后点击扫描。扫描会自动刷新该页面。</div>
+        </section>
+      </div>
+
+      <!-- Tab: Unfollow -->
+      <div id="dash-tab-unfollow" class="dash-tab">
+        <section class="panel-card full-width">
+          <div class="table-header-row">
+            <h3>👥 批量取关 — 演示学习模式</h3>
+          </div>
+          <div class="live-desc">① 打开你的<b>「关注」列表页</b>（左侧导航 → 关注）② <b>手动取关任意 1 人</b>（教会扩展取关接口，之后可关注回去）③ 点「读取」→ 勾选 → 开始取关。每次约 3-6 秒，太急会触发限制。</div>
+          <div class="action-btn-group">
+            <button id="dash-load-following-btn" class="btn btn-secondary">📋 读取已捕获的关注列表</button>
+            <button id="dash-unfollow-btn" class="btn btn-danger" disabled>🚫 开始取关 0 人</button>
+          </div>
+          <div id="dash-following-status" class="file-info-text">待读取</div>
+          <div id="dash-following-list" class="following-list" style="display:none">
+            <div class="following-list-header">
+              <label><input type="checkbox" id="dash-following-check-all" checked> <b>全选</b></label>
+              <span id="dash-following-selected-count" class="file-info-text"></span>
+            </div>
+            <div id="dash-following-items" class="following-items"></div>
+          </div>
+        </section>
+      </div>
+
+      <!-- Shared Activity Log (all features) -->
+      <section class="panel-card full-width">
+        <div class="log-header">
+          <span>实时操作审计日志（所有功能共用）</span>
+          <button id="clear-log-btn" class="btn-xs">清屏</button>
+        </div>
+        <div class="log-console" id="log-console">
+          <div class="log-item info">[系统] SweepX 已启动。</div>
         </div>
       </section>
     </main>
