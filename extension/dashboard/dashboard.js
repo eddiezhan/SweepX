@@ -97,6 +97,9 @@ const dashTabUnfollow = document.getElementById('dash-tab-unfollow');
 const dashScanBtn = document.getElementById('dash-scan-btn');
 const dashScanDepth = document.getElementById('dash-scan-depth');
 const dashScanStatus = document.getElementById('dash-scan-status');
+const dashScanResult = document.getElementById('dash-scan-result');
+const dashScanResultText = document.getElementById('dash-scan-result-text');
+const dashGotoArchiveBtn = document.getElementById('dash-goto-archive-btn');
 const dashLoadFollowingBtn = document.getElementById('dash-load-following-btn');
 const dashUnfollowBtn = document.getElementById('dash-unfollow-btn');
 const dashFollowingStatus = document.getElementById('dash-following-status');
@@ -191,6 +194,7 @@ function bindEvents() {
 
   // Live scan (dashboard)
   dashScanBtn.addEventListener('click', () => handleDashLiveScan().catch(err => appendLog(`[扫描] 异常: ${err.message}`, 'error')));
+  dashGotoArchiveBtn.addEventListener('click', () => switchDashTab('archive'));
 
   // Unfollow (dashboard)
   dashLoadFollowingBtn.addEventListener('click', () => handleDashLoadFollowing().catch(err => appendLog(`[取关] 读取异常: ${err.message}`, 'error')));
@@ -732,7 +736,16 @@ async function handleDashLiveScan() {
         response.mode === 'api' ? 'success' : 'warn');
       updateOverviewStats();
       applyFilters();
-      dashScanStatus.textContent = `扫描完成：本次 ${fresh.length} 条，累计 ${rawTweets.length} 条。可在归档页查看预览并执行删除。`;
+      // Show results right here in the live-scan tab (stats/preview live in
+      // the archive tab, which would otherwise look untouched)
+      const catCount = { original: 0, retweet: 0, quote: 0, reply: 0 };
+      for (const t of rawTweets) {
+        if (catCount[t.category] !== undefined) catCount[t.category]++;
+      }
+      dashScanResultText.textContent =
+        `数据池现有 ${rawTweets.length} 条：原帖 ${catCount.original} · 转推 ${catCount.retweet} · 引用 ${catCount.quote} · 回复 ${catCount.reply}`;
+      dashScanResult.style.display = 'flex';
+      dashScanStatus.textContent = `扫描完成：本次 ${fresh.length} 条，累计 ${rawTweets.length} 条。`;
     } else {
       throw new Error('扫描结果为空');
     }

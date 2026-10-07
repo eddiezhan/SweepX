@@ -678,3 +678,22 @@ body {
 .log-slot {
   margin-top: 16px;
 }
+
+/* Live scan result box */
+.scan-result-box {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  margin-top: 12px;
+  padding: 14px 18px;
+  background: rgba(0, 186, 124, 0.08);
+  border: 1px solid rgba(0, 186, 124, 0.4);
+  border-radius: 10px;
+}
+
+.scan-result-text {
+  font-size: 15px;
+  font-weight: 600;
+  color: #00ba7c;
+}
