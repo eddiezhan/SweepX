@@ -19,6 +19,7 @@ Bulk-delete your posts / retweets / quotes / replies, and bulk-unfollow — your
 - **👥 Batch unfollow** — learn-by-demo architecture: manually unfollow ONE account to teach SweepX the current unfollow endpoint, then tick a checklist and run (all selected by default, display names shown, rate-limited pacing)
 - **🎯 Accurate 4-way classification** — posts / retweets / quotes / replies; retweets go through Unretweet, everything else through DeleteTweet
 - **🔍 Multi-dimensional filters** — date range, keep highly-liked/highly-retweeted posts, keyword whitelist to prevent accidents
+- **✅ Per-item exclusion** — untick rows in the dashboard preview table to keep specific posts (all selected by default)
 - **🧪 Dry-Run mode** — preview exactly what would be deleted without calling the API
 - **⏯ Checkpoint & resume** — queue and progress persist in real time; close the tab or restart the browser and resume where you left off
 - **🧠 Endpoint auto-learning** — captures the page's own delete requests and query IDs, so X rotations don't require extension updates; self-persists after the first successful deletion

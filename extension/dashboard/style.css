@@ -697,3 +697,7 @@ body {
   font-weight: 600;
   color: #00ba7c;
 }
+
+.preview-row.excluded {
+  opacity: 0.4;
+}

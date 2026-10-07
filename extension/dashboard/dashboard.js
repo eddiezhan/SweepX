@@ -23,6 +23,11 @@ import {
 // Application State
 let rawTweets = [];
 let matchedTweets = [];
+const previewExcluded = new Set(); // ids unchecked in the preview = keep these
+
+function getSelectedTweets() {
+  return matchedTweets.filter(t => !previewExcluded.has(t.id));
+}
 let activeSession = null;
 let client = null;
 let engine = null;
@@ -107,6 +112,7 @@ const dashFollowingList = document.getElementById('dash-following-list');
 const dashFollowingItems = document.getElementById('dash-following-items');
 const dashFollowingCheckAll = document.getElementById('dash-following-check-all');
 const dashFollowingSelectedCount = document.getElementById('dash-following-selected-count');
+const previewCheckAll = document.getElementById('preview-check-all');
 
 // Unfollow state (dashboard)
 let dashFollowingUsers = [];
@@ -205,6 +211,16 @@ function bindEvents() {
     updateDashFollowingSelection();
   });
 
+  // Preview table select-all: checked = clear exclusions, unchecked = keep all
+  previewCheckAll.addEventListener('change', () => {
+    if (previewCheckAll.checked) {
+      previewExcluded.clear();
+    } else {
+      matchedTweets.forEach(t => previewExcluded.add(t.id));
+    }
+    renderPreviewTable();
+  });
+
   // Live scan is the default tab (and the shared log starts inside it)
   switchDashTab('live');
 }
@@ -273,6 +289,7 @@ function processFile(file) {
     try {
       const content = e.target.result;
       rawTweets = parseArchiveContent(content);
+      previewExcluded.clear();
       fileInfo.textContent = `成功加载: ${file.name}，包含 ${rawTweets.length} 条推文记录。`;
       appendLog(`[解析] 成功解析 ${rawTweets.length} 条历史推文！`, 'success');
       
@@ -357,13 +374,15 @@ function applyFilters() {
 function renderPreviewTable() {
   previewTbody.innerHTML = '';
   if (matchedTweets.length === 0) {
-    previewTbody.innerHTML = '<tr><td colspan="5" style="text-align: center; color: #71767b; padding: 20px;">没有符合筛选条件的数据</td></tr>';
+    previewTbody.innerHTML = '<tr><td colspan="6" style="text-align: center; color: #71767b; padding: 20px;">没有符合筛选条件的数据</td></tr>';
+    previewCountLabel.textContent = '共匹配 0 条 · 已选 0 条';
     return;
   }
 
   const itemsToShow = matchedTweets.slice(0, 50);
   for (const t of itemsToShow) {
     const tr = document.createElement('tr');
+    const trClass = previewExcluded.has(t.id) ? 'preview-row excluded' : 'preview-row';
 
     const catName = {
       original: '原创发帖',
@@ -375,21 +394,45 @@ function renderPreviewTable() {
     const dateStr = t.createdAt instanceof Date ? t.createdAt.toLocaleDateString() : '';
     const targetIdStr = t.category === TweetCategory.RETWEET ? `原推: ${t.sourceTweetId || t.id}` : t.id;
 
+    tr.className = trClass;
     tr.innerHTML = `
+      <td><input type="checkbox" data-id="${t.id}" ${previewExcluded.has(t.id) ? '' : 'checked'}></td>
       <td><span class="type-pill ${t.category}">${catName}</span></td>
       <td>${dateStr}</td>
       <td style="font-family: monospace; font-size: 11px;">${targetIdStr}</td>
       <td style="max-width: 400px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="${escapeHtml(t.text)}">${escapeHtml(t.text)}</td>
       <td style="font-size: 11px; color: #8b949e;">❤️ ${t.favoriteCount} / 🔁 ${t.retweetCount}</td>
     `;
+    const cb = tr.querySelector('input[type="checkbox"]');
+    cb.addEventListener('change', () => {
+      if (cb.checked) previewExcluded.delete(t.id);
+      else previewExcluded.add(t.id);
+      tr.className = cb.checked ? 'preview-row' : 'preview-row excluded';
+      updateDeletionSelection();
+    });
     previewTbody.appendChild(tr);
+  }
+  updateDeletionSelection();
+}
+
+// Keep start/export state in sync with the checked selection (excluded =
+// keep). Running state is governed by the engine's own onStateChange.
+function updateDeletionSelection() {
+  const selected = getSelectedTweets();
+  previewCountLabel.textContent =
+    `共匹配 ${matchedTweets.length.toLocaleString()} 条 · 已选 ${selected.length.toLocaleString()} 条`;
+  const running = engine && (engine.state === EngineState.RUNNING || engine.state === EngineState.COOLING_OFF);
+  if (!running) {
+    startBtn.disabled = selected.length === 0;
+    exportBtn.disabled = selected.length === 0;
   }
 }
 
 // --- Engine Execution ---
 async function handleStart() {
-  if (matchedTweets.length === 0) {
-    alert('请先导入推文数据并确认有待删除的匹配项！');
+  const selectedTweets = getSelectedTweets();
+  if (selectedTweets.length === 0) {
+    alert('没有已勾选的推文可删除。\n提示：勾选 = 删除，取消勾选 = 保留。');
     return;
   }
 
@@ -400,26 +443,25 @@ async function handleStart() {
   }
 
   const confirmMsg = isDryRun
-    ? `即将启动【模拟测试模式 (Dry-Run)】，模拟处理 ${matchedTweets.length} 条推文。是否继续？`
-    : `【高能警告】即将开始真实批量删除！\n\n共 ${matchedTweets.length} 条推文将被永久删除。\n此操作不可逆！\n\n是否确认开始？`;
+    ? `即将启动【模拟测试模式 (Dry-Run)】，模拟处理 ${selectedTweets.length} 条推文。是否继续？`
+    : `【高能警告】即将开始真实批量删除！\n\n共 ${selectedTweets.length} 条推文将被永久删除。\n此操作不可逆！\n\n是否确认开始？`;
 
   if (!confirm(confirmMsg)) return;
 
   await ensureClientReady();
 
-  // Persist checkpoint so the run survives tab/browser close (resume later)
-  await createCheckpoint(matchedTweets, { dryRun: isDryRun });
+  await createCheckpoint(selectedTweets, { dryRun: isDryRun });
   resumeBar.style.display = 'none';
 
   // Reset metrics
   countSuccess = 0;
   countAlready = 0;
   countFailed = 0;
-  updateMetricsDisplay(0, matchedTweets.length);
+  updateMetricsDisplay(0, selectedTweets.length);
 
   engine = buildEngine(isDryRun);
-  engine.setQueue(matchedTweets);
-  appendLog(`[任务启动] 队列共 ${matchedTweets.length} 项 (Dry-Run: ${isDryRun})`, 'info');
+  engine.setQueue(selectedTweets);
+  appendLog(`[任务启动] 队列共 ${selectedTweets.length} 项 (Dry-Run: ${isDryRun})`, 'info');
   await engine.start();
 }
 
@@ -507,7 +549,7 @@ function buildEngine(dryRun) {
         startBtn.textContent = '▶ 继续清理';
         pauseBtn.disabled = true;
       } else if (s.state === EngineState.IDLE || s.state === EngineState.STOPPED) {
-        startBtn.disabled = false;
+        startBtn.disabled = getSelectedTweets().length === 0;
         startBtn.textContent = '🚀 开始清理';
         pauseBtn.disabled = true;
         stopBtn.disabled = true;
@@ -549,6 +591,7 @@ async function handleResume() {
 
   matchedTweets = cp.queue;
   dryRunToggle.checked = cp.state.dryRun;
+  previewExcluded.clear();
   await ensureClientReady();
 
   // Restore metrics from checkpoint
@@ -745,6 +788,7 @@ async function handleDashLiveScan() {
       const merged = new Map(rawTweets.map(t => [t.id, t]));
       for (const t of fresh) merged.set(t.id, t);
       rawTweets = Array.from(merged.values());
+      previewExcluded.clear();
 
       appendLog(`[扫描] 本次 ${fresh.length} 条，累计 ${rawTweets.length} 条 (${response.mode === 'api' ? '接口精确数据 ✓' : '页面解析兜底'})`,
         response.mode === 'api' ? 'success' : 'warn');
