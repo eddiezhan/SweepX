@@ -1,0 +1,23 @@
+{
+  "manifest_version": 3,
+  "name": "deleteX - 批量删除 X 发帖/转推/引用/回复",
+  "version": "1.0.0",
+  "description": "0 成本、保护隐私的 X (Twitter) 历史推文、转推、引用与回复批量清理工具",
+  "permissions": [
+    "cookies",
+    "storage",
+    "activeTab"
+  ],
+  "host_permissions": [
+    "https://x.com/*",
+    "https://twitter.com/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_popup": "popup/popup.html",
+    "default_title": "deleteX 控制面板"
+  },
+  "options_page": "dashboard/index.html"
+}

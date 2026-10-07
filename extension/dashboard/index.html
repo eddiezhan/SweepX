@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>deleteX - 批量删除 X 发帖/转推/引用/回复 控制台</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="app-container">
+    <!-- Top Bar -->
+    <header class="top-nav">
+      <div class="brand">
+        <span class="logo">delete<span class="highlight">X</span></span>
+        <span class="badge">v1.0.0</span>
+        <span class="badge badge-free">100% 免费 / 保护隐私</span>
+      </div>
+      <div class="session-box" id="session-status-box">
+        <span class="indicator-dot" id="session-dot"></span>
+        <span id="session-text">检测 X 会话凭据中...</span>
+        <button id="refresh-session-btn" class="btn-sm">刷新凭据</button>
+      </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="main-content">
+      <!-- Overview Stat Cards -->
+      <section class="stats-grid">
+        <div class="stat-card">
+          <div class="stat-title">总推文数</div>
+          <div class="stat-value" id="stat-total">0</div>
+          <div class="stat-sub" id="stat-matched">待清理: 0</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-title">原创发帖 (Post)</div>
+          <div class="stat-value color-original" id="stat-original">0</div>
+          <div class="stat-sub">DeleteTweet</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-title">转发 / 转推 (Retweet)</div>
+          <div class="stat-value color-retweet" id="stat-retweet">0</div>
+          <div class="stat-sub">DeleteRetweet</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-title">引用 (Quote)</div>
+          <div class="stat-value color-quote" id="stat-quote">0</div>
+          <div class="stat-sub">DeleteTweet</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-title">回复 (Reply)</div>
+          <div class="stat-value color-reply" id="stat-reply">0</div>
+          <div class="stat-sub">DeleteTweet</div>
+        </div>
+      </section>
+
+      <!-- Import & Rules Panel -->
+      <div class="two-col-layout">
+        <!-- Left: Upload & Config -->
+        <div class="col-panel">
+          <div class="panel-card">
+            <h3 class="panel-header">1. 导入数据归档 (tweets.js)</h3>
+            <div class="drop-zone" id="drop-zone">
+              <div class="drop-icon">📁</div>
+              <div class="drop-text">拖拽 <code>tweets.js</code> 到此处，或点击选择</div>
+              <div class="drop-sub">来自 X 官方数据包 (Twitter Archive) 中的 data/tweets.js</div>
+              <input type="file" id="file-input" accept=".js,.json" style="display: none;">
+            </div>
+            <div id="file-info" class="file-info-text">未加载文件</div>
+          </div>
+
+          <div class="panel-card">
+            <h3 class="panel-header">2. 清理规则与筛选器</h3>
+            <div class="form-group">
+              <label class="form-label">推文类型筛选:</label>
+              <div class="checkbox-group">
+                <label class="checkbox-label">
+                  <input type="checkbox" id="filter-original" checked> 原创发帖
+                </label>
+                <label class="checkbox-label">
+                  <input type="checkbox" id="filter-retweet" checked> 转发 / 转推
+                </label>
+                <label class="checkbox-label">
+                  <input type="checkbox" id="filter-quote" checked> 引用发帖
+                </label>
+                <label class="checkbox-label">
+                  <input type="checkbox" id="filter-reply" checked> 回复
+                </label>
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">发布时间范围:</label>
+              <div class="date-inputs">
+                <input type="date" id="filter-start-date" class="input-text">
+                <span class="date-separator">至</span>
+                <input type="date" id="filter-end-date" class="input-text">
+              </div>
+              <div class="quick-preset-btns">
+                <button class="preset-btn" data-preset="all">全部时间</button>
+                <button class="preset-btn" data-preset="1y">1 年前以前</button>
+                <button class="preset-btn" data-preset="2y">2 年前以前</button>
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">保护高互动推文 (大于等于则保留不删):</label>
+              <div class="two-inputs">
+                <div class="input-inline">
+                  <span>点赞 ≥</span>
+                  <input type="number" id="keep-fav-input" placeholder="不限" min="0" class="input-text-sm">
+                </div>
+                <div class="input-inline">
+                  <span>转推 ≥</span>
+                  <input type="number" id="keep-rt-input" placeholder="不限" min="0" class="input-text-sm">
+                </div>
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">关键词白名单 (包含则保留，英文逗号分隔):</label>
+              <input type="text" id="exclude-keywords-input" placeholder="如: 重要, 纪念, #keep" class="input-text">
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">安全流控设置:</label>
+              <div class="two-inputs">
+                <div class="input-inline">
+                  <span>单条延时 (秒):</span>
+                  <input type="text" id="delay-range" value="2.0 - 4.5" class="input-text-sm" readonly>
+                </div>
+                <div class="input-inline">
+                  <span>滑动批次:</span>
+                  <input type="text" value="60 条 / 休眠 15 分钟" class="input-text-sm" readonly>
+                </div>
+              </div>
+            </div>
+
+            <div class="dry-run-row">
+              <label class="checkbox-label">
+                <input type="checkbox" id="dry-run-toggle">
+                <strong>模拟测试模式 (Dry-Run)</strong> - 不真正调用 X 接口删除，仅跑通流程
+              </label>
+            </div>
+          </div>
+        </div>
+
+        <!-- Right: Execution & Monitor -->
+        <div class="col-panel">
+          <div class="panel-card">
+            <h3 class="panel-header">3. 执行控制台</h3>
+
+            <div class="action-btn-group">
+              <button id="start-btn" class="btn btn-primary" disabled>🚀 开始清理</button>
+              <button id="pause-btn" class="btn btn-warning" disabled>⏸ 暂停</button>
+              <button id="stop-btn" class="btn btn-danger" disabled>⏹ 终止</button>
+              <button id="export-btn" class="btn btn-secondary" disabled>💾 导出备份 CSV</button>
+            </div>
+
+            <!-- Progress Bar -->
+            <div class="progress-box">
+              <div class="progress-header">
+                <span id="progress-status-text">准备就绪</span>
+                <span id="progress-percent-text">0.0%</span>
+              </div>
+              <div class="progress-track">
+                <div class="progress-fill" id="progress-bar-fill" style="width: 0%;"></div>
+              </div>
+              <div class="progress-metrics">
+                <span>处理进度: <b id="metric-current">0</b> / <b id="metric-total">0</b></span>
+                <span>成功删除: <b id="metric-success" class="color-success">0</b></span>
+                <span>已提前删除: <b id="metric-already" class="color-warn">0</b></span>
+                <span>失败: <b id="metric-failed" class="color-danger">0</b></span>
+              </div>
+            </div>
+
+            <!-- Cooling Alert -->
+            <div id="cooling-banner" class="cooling-banner" style="display: none;">
+              ⏳ 防封控休眠中: 正在保护账号滑动窗口，剩余休眠时间: <span id="cooling-countdown">15:00</span>
+            </div>
+
+            <!-- Real-time Activity Logs -->
+            <div class="log-section">
+              <div class="log-header">
+                <span>实时操作审计日志</span>
+                <button id="clear-log-btn" class="btn-xs">清屏</button>
+              </div>
+              <div class="log-console" id="log-console">
+                <div class="log-item info">[系统] deleteX 已启动，请先导入 tweets.js 数据文件。</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Preview Table Section -->
+      <section class="panel-card full-width">
+        <div class="table-header-row">
+          <h3>待删除数据预览 (显示前 50 条匹配项)</h3>
+          <span class="preview-count" id="preview-count-label">共匹配 0 条</span>
+        </div>
+        <div class="table-responsive">
+          <table class="preview-table">
+            <thead>
+              <tr>
+                <th width="140">类型</th>
+                <th width="180">发帖时间</th>
+                <th width="160">ID / 原推 ID</th>
+                <th>正文内容</th>
+                <th width="100">互动数据</th>
+              </tr>
+            </thead>
+            <tbody id="preview-tbody">
+              <tr>
+                <td colspan="5" style="text-align: center; color: #71767b; padding: 24px;">暂无数据，请先导入 tweets.js</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script type="module" src="dashboard.js"></script>
+</body>
+</html>

@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <title>deleteX 控制面板</title>
+  <style>
+    body {
+      width: 320px;
+      margin: 0;
+      padding: 16px;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background-color: #0f1419;
+      color: #e7e9ea;
+      box-sizing: border-box;
+    }
+    .header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 12px;
+      border-bottom: 1px solid #2f3336;
+      padding-bottom: 10px;
+    }
+    .logo {
+      font-size: 20px;
+      font-weight: 800;
+      background: linear-gradient(135deg, #1d9bf0, #8ec5fc);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    .tag {
+      font-size: 11px;
+      background: #1d9bf022;
+      color: #1d9bf0;
+      padding: 2px 6px;
+      border-radius: 4px;
+      border: 1px solid #1d9bf044;
+    }
+    .desc {
+      font-size: 13px;
+      color: #71767b;
+      line-height: 1.4;
+      margin-bottom: 16px;
+    }
+    .status-card {
+      background: #16181c;
+      border: 1px solid #2f3336;
+      border-radius: 8px;
+      padding: 12px;
+      margin-bottom: 16px;
+      font-size: 12px;
+    }
+    .status-row {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 6px;
+    }
+    .status-row:last-child {
+      margin-bottom: 0;
+    }
+    .status-val {
+      font-weight: 600;
+      color: #00ba7c;
+    }
+    .status-val.warn {
+      color: #f4212e;
+    }
+    .btn {
+      display: block;
+      width: 100%;
+      box-sizing: border-box;
+      padding: 10px;
+      border: none;
+      border-radius: 9999px;
+      background-color: #1d9bf0;
+      color: #fff;
+      font-weight: 700;
+      font-size: 14px;
+      cursor: pointer;
+      text-align: center;
+      transition: background-color 0.2s;
+    }
+    .btn:hover {
+      background-color: #1a8cd8;
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div class="logo">deleteX</div>
+    <div class="tag">0 成本 / 本地运行</div>
+  </div>
+  <div class="desc">批量删除 X 的发帖、转推、引用与回复，突破 3200 条限制，保护隐私。</div>
+
+  <div class="status-card">
+    <div class="status-row">
+      <span>登录状态:</span>
+      <span id="login-status" class="status-val">检测中...</span>
+    </div>
+    <div class="status-row">
+      <span>CSRF 凭证:</span>
+      <span id="csrf-status" class="status-val">--</span>
+    </div>
+  </div>
+
+  <button id="open-dashboard-btn" class="btn">打开完整控制台</button>
+
+  <script src="popup.js"></script>
+</body>
+</html>
