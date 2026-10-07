@@ -655,35 +655,59 @@ async function handleStartUnfollow() {
   // Locate the target-id field in the learned template. Two body shapes exist:
   // JSON (GraphQL mutations) and form-encoded (v1.1 friendships/destroy).
   // No guessed names — whatever field carried the demo target, we swap that one.
+  // Try candidates in order (destroy/unfollow-ish first, full bodies before
+  // log snippets) until one yields the target field.
+  const tryOrder = [
+    ...cands.filter(c => /destroy|unfollow/i.test(c.opName)),
+    ...cands.filter(c => !/destroy|unfollow/i.test(c.opName))
+  ];
   let parsedBody = null;
   let formParams = null;
   let isJsonBody = false;
   let idField = null;
   let swapWith = null; // 'id' (numeric user id) or 'name' (screen_name)
-  try {
-    const raw = unfollowMutation.bodyText.trim();
-    if (raw.startsWith('{')) {
-      isJsonBody = true;
-      parsedBody = JSON.parse(raw);
-      for (const [k, v] of Object.entries(parsedBody.variables || {})) {
-        if (typeof v !== 'string' || !v) continue;
-        if (/^\d{6,}$/.test(v)) { idField = k; swapWith = 'id'; break; }
-        if (/screen_name/i.test(k)) { idField = k; swapWith = 'name'; break; }
+  let learnedFrom = null;
+
+  function extractTargetField(bodyText) {
+    try {
+      const raw = String(bodyText || '').trim();
+      if (raw.startsWith('{')) {
+        const parsed = JSON.parse(raw);
+        for (const [k, v] of Object.entries(parsed.variables || {})) {
+          if (typeof v !== 'string' || !v) continue;
+          if (/^\d{6,}$/.test(v)) return { parsedBody: parsed, isJsonBody: true, idField: k, swapWith: 'id' };
+          if (/screen_name/i.test(k)) return { parsedBody: parsed, isJsonBody: true, idField: k, swapWith: 'name' };
+        }
+      } else {
+        const params = new URLSearchParams(raw);
+        for (const [k, v] of params.entries()) {
+          if (!v) continue;
+          if (/^\d{6,}$/.test(v)) return { formParams: params, isJsonBody: false, idField: k, swapWith: 'id' };
+          if (/screen_name/i.test(k)) return { formParams: params, isJsonBody: false, idField: k, swapWith: 'name' };
+        }
       }
-    } else {
-      formParams = new URLSearchParams(raw);
-      for (const [k, v] of formParams.entries()) {
-        if (!v) continue;
-        if (/^\d{6,}$/.test(v)) { idField = k; swapWith = 'id'; break; }
-        if (/screen_name/i.test(k)) { idField = k; swapWith = 'name'; break; }
-      }
+    } catch (e) { /* fall through */ }
+    return null;
+  }
+
+  for (const cand of tryOrder) {
+    const res = extractTargetField(cand.bodyText);
+    if (res) {
+      parsedBody = res.parsedBody || null;
+      formParams = res.formParams || null;
+      isJsonBody = res.isJsonBody;
+      idField = res.idField;
+      swapWith = res.swapWith;
+      learnedFrom = cand;
+      break;
     }
-  } catch (e) { /* handled below */ }
+  }
   if (!idField) {
-    alert(`未能从学习的请求中识别目标用户字段 (body: ${unfollowMutation.bodyText.slice(0, 120)})，取关终止。`);
+    alert(`未能从学习的请求中识别目标用户字段，取关终止。候选数: ${cands.length}`);
     return;
   }
-  log(`[取关] 已识别目标字段: ${idField} (${swapWith === 'id' ? '用户ID' : '用户名'})`, 'info');
+  unfollowMutation = learnedFrom;
+  log(`[取关] 已识别目标字段: ${idField} (${swapWith === 'id' ? '用户ID' : '用户名'})，模板来源: ${learnedFrom.opName}`, 'info');
 
   unfollowRunning = true;
   unfollowBtn.disabled = true;

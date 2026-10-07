@@ -289,14 +289,25 @@
         const body = args[0] == null ? '' : String(args[0]);
         if (body) pushRecentPost(this.__sweepxAllUrl || '', body);
         const info = this.__sweepx;
-        if (info && /follow|friendship/i.test(info.opName) && body && body.includes('"variables"')) {
-          followBuffer.mutationCandidates.push({
-            opName: info.opName,
-            queryId: info.queryId,
-            url: info.url,
-            bodyText: body
-          });
-          if (followBuffer.mutationCandidates.length > 5) followBuffer.mutationCandidates.shift();
+        if (info && body) {
+          if (info.opName.startsWith('friendships/')) {
+            // REST follow/unfollow: form body (no "variables") — capture FULL body
+            followBuffer.mutationCandidates.push({
+              opName: info.opName,
+              queryId: info.queryId,
+              url: info.url,
+              bodyText: body
+            });
+            if (followBuffer.mutationCandidates.length > 5) followBuffer.mutationCandidates.shift();
+          } else if (/follow|friendship/i.test(info.opName) && body.includes('"variables"')) {
+            followBuffer.mutationCandidates.push({
+              opName: info.opName,
+              queryId: info.queryId,
+              url: info.url,
+              bodyText: body
+            });
+            if (followBuffer.mutationCandidates.length > 5) followBuffer.mutationCandidates.shift();
+          }
         }
       } catch (e) { /* ignore */ }
       return origSend.apply(this, args);
