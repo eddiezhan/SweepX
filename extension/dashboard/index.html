@@ -40,6 +40,37 @@
         <button class="dash-tab-btn" id="dash-tab-btn-archive">📁 归档清理 (全量)</button>
       </nav>
 
+      <!-- Shared Execution Console (visible on live-scan & archive tabs) -->
+      <div id="dash-exec-section">
+        <section class="panel-card full-width">
+          <h3 class="panel-header">🗑 删除执行台 — 在线扫描或归档导入的数据都在这里执行</h3>
+          <div class="action-btn-group">
+            <button id="start-btn" class="btn btn-primary" disabled>🚀 开始清理</button>
+            <button id="pause-btn" class="btn btn-warning" disabled>⏸ 暂停</button>
+            <button id="stop-btn" class="btn btn-danger" disabled>⏹ 终止</button>
+            <button id="export-btn" class="btn btn-secondary" disabled>💾 导出备份 CSV</button>
+          </div>
+          <div class="progress-box">
+            <div class="progress-header">
+              <span id="progress-status-text">准备就绪</span>
+              <span id="progress-percent-text">0.0%</span>
+            </div>
+            <div class="progress-track">
+              <div class="progress-fill" id="progress-bar-fill" style="width: 0%;"></div>
+            </div>
+            <div class="progress-metrics">
+              <span>处理进度: <b id="metric-current">0</b> / <b id="metric-total">0</b></span>
+              <span>成功删除: <b id="metric-success" class="color-success">0</b></span>
+              <span>已提前删除: <b id="metric-already" class="color-warn">0</b></span>
+              <span>失败: <b id="metric-failed" class="color-danger">0</b></span>
+            </div>
+          </div>
+          <div id="cooling-banner" class="cooling-banner" style="display: none;">
+            ⏳ 防封控休眠中: 正在保护账号滑动窗口，剩余休眠时间: <span id="cooling-countdown">15:00</span>
+          </div>
+        </section>
+      </div>
+
       <div id="dash-tab-archive" class="dash-tab">
       <!-- Overview Stat Cards -->
       <section class="stats-grid">
@@ -71,8 +102,8 @@
       </section>
 
       <!-- Import & Rules Panel -->
-      <div class="two-col-layout">
-        <!-- Left: Upload & Config -->
+      <div class="two-col-layout" style="grid-template-columns: 1fr;">
+        <!-- Upload & Config -->
         <div class="col-panel">
           <div class="panel-card">
             <h3 class="panel-header">1. 导入数据归档 (tweets.js)</h3>
@@ -161,52 +192,6 @@
           </div>
         </div>
 
-        <!-- Right: Execution & Monitor -->
-        <div class="col-panel">
-          <div class="panel-card">
-            <h3 class="panel-header">3. 执行控制台</h3>
-
-            <div class="action-btn-group">
-              <button id="start-btn" class="btn btn-primary" disabled>🚀 开始清理</button>
-              <button id="pause-btn" class="btn btn-warning" disabled>⏸ 暂停</button>
-              <button id="stop-btn" class="btn btn-danger" disabled>⏹ 终止</button>
-              <button id="export-btn" class="btn btn-secondary" disabled>💾 导出备份 CSV</button>
-            </div>
-
-            <!-- Progress Bar -->
-            <div class="progress-box">
-              <div class="progress-header">
-                <span id="progress-status-text">准备就绪</span>
-                <span id="progress-percent-text">0.0%</span>
-              </div>
-              <div class="progress-track">
-                <div class="progress-fill" id="progress-bar-fill" style="width: 0%;"></div>
-              </div>
-              <div class="progress-metrics">
-                <span>处理进度: <b id="metric-current">0</b> / <b id="metric-total">0</b></span>
-                <span>成功删除: <b id="metric-success" class="color-success">0</b></span>
-                <span>已提前删除: <b id="metric-already" class="color-warn">0</b></span>
-                <span>失败: <b id="metric-failed" class="color-danger">0</b></span>
-              </div>
-            </div>
-
-            <!-- Cooling Alert -->
-            <div id="cooling-banner" class="cooling-banner" style="display: none;">
-              ⏳ 防封控休眠中: 正在保护账号滑动窗口，剩余休眠时间: <span id="cooling-countdown">15:00</span>
-            </div>
-
-            <!-- Real-time Activity Logs -->
-            <div class="log-section">
-              <div class="log-header">
-                <span>实时操作审计日志</span>
-                <button id="clear-log-btn" class="btn-xs">清屏</button>
-              </div>
-              <div class="log-console" id="log-console">
-                <div class="log-item info">[系统] SweepX 已启动，请先导入 tweets.js 数据文件。</div>
-              </div>
-            </div>
-          </div>
-        </div>
       </div>
 
       <!-- Preview Table Section -->

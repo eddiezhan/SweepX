@@ -312,7 +312,16 @@ function updateOverviewStats() {
 
 // --- Filters & Preview ---
 function applyFilters() {
-  if (rawTweets.length === 0) return;
+  // The run button follows the data — whether it came from an archive import
+  // or a live scan. No data = no run.
+  if (rawTweets.length === 0) {
+    matchedTweets = [];
+    statMatched.textContent = '待清理: 0';
+    startBtn.disabled = true;
+    exportBtn.disabled = true;
+    renderPreviewTable();
+    return;
+  }
 
   const categories = [];
   if (filterOriginal.checked) categories.push(TweetCategory.ORIGINAL);
@@ -339,7 +348,9 @@ function applyFilters() {
   statMatched.textContent = `待清理: ${matchedTweets.length.toLocaleString()}`;
   metricTotal.textContent = matchedTweets.length.toLocaleString();
   previewCountLabel.textContent = `共匹配 ${matchedTweets.length.toLocaleString()} 条`;
-
+  // Data from live scans unlocks the run button exactly like archive imports
+  startBtn.disabled = matchedTweets.length === 0;
+  exportBtn.disabled = matchedTweets.length === 0;
   renderPreviewTable();
 }
 
