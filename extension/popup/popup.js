@@ -101,6 +101,20 @@ let followingUsers = [];
 let unfollowMutation = null;
 let unfollowRunning = false;
 
+/**
+ * Picks the real unfollow mutation from captured candidates. List queries
+ * (e.g. UserFollowing) also match /follow/, so prefer explicit unfollow-ish
+ * operation names; fall back to the most recent candidate.
+ */
+function pickUnfollowMutation(candidates) {
+  if (!Array.isArray(candidates) || candidates.length === 0) return null;
+  return (
+    candidates.find(m => /unfollow|destroy/i.test(m.opName)) ||
+    candidates[candidates.length - 1] ||
+    null
+  );
+}
+
 // Init
 document.addEventListener('DOMContentLoaded', () => {
   bindEvents();
@@ -221,6 +235,16 @@ function switchTab(mode) {
     const active = key === mode;
     btn.classList.toggle('active', active);
     content.classList.toggle('active', active);
+  }
+  // Deletion-only UI (categories, filters, delete button) stays out of the
+  // unfollow tab — that page is exclusively about unfollowing
+  setDeletionUiVisible(mode !== 'unfollow');
+}
+
+function setDeletionUiVisible(visible) {
+  for (const id of ['section-categories', 'section-adv', 'section-actions']) {
+    const el = document.getElementById(id);
+    if (el) el.style.display = visible ? '' : 'none';
   }
 }
 
@@ -559,7 +583,7 @@ async function handleLoadFollowing() {
     }
 
     followingUsers = (resp && resp.users) || [];
-    unfollowMutation = (resp && resp.followMutation) || null;
+    unfollowMutation = pickUnfollowMutation(resp && resp.mutationCandidates);
 
     if (followingUsers.length === 0) {
       followingStatus.textContent = '未捕获到关注列表。请打开「关注」列表页并刷新页面后重试。';

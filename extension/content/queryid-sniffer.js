@@ -32,8 +32,10 @@
 
   // Following-list capture + unfollow template learning
   const followBuffer = {
-    users: new Map(),    // user id -> {id, name} (entries seen on following lists)
-    lastMutation: null   // {opName, queryId, url, bodyText} — the last follow-family POST
+    users: new Map(),          // user id -> {id, name} (entries seen on following lists)
+    mutationCandidates: []     // last follow-family POST bodies (newest last; a list
+                               // query like UserFollowing also matches /follow/, so
+                               // the popup picks the real mutation from candidates)
   };
 
   function trackOp(name) {
@@ -54,7 +56,7 @@
         window.postMessage({
           source: 'sweepx-following',
           users: Array.from(followBuffer.users.values()),
-          mutation: followBuffer.lastMutation
+          mutationCandidates: followBuffer.mutationCandidates
         }, '*');
         window.postMessage({ source: 'sweepx-sniff-debug', sniff: { ...sniff } }, '*');
       } catch (e) { /* ignore */ }
@@ -204,27 +206,32 @@
           trackOp(opName);
           if (opName === 'DeleteTweet' || opName === 'DeleteRetweet') {
             report(opName, queryId);
-          } else if (/follow|friendship/i.test(opName)) {
-            // Learn the unfollow request template from the page's own mutation
-            try {
-              const init = args[1];
-              const body = init && typeof init.body === 'string' ? init.body : null;
-              if (body) {
-                followBuffer.lastMutation = { opName, queryId, url, bodyText: body };
-              }
-            } catch (e) { /* ignore */ }
-          } else if (/Timeline/.test(opName) && promise && typeof promise.then === 'function') {
-            // Capture any *Timeline* operation (X renames these often:
-            // UserTweets, UserTweetsAndReplies, UserRepliesTimeline, ...).
-            // Ownership filtering happens during extraction, so breadth is safe.
-            // Capture the response body without consuming it for the page
-            promise.then(res => {
+          } else {
+            // Follow-family ops need BOTH handlers, never else-if:
+            // e.g. "UserFollowing" is a list QUERY whose response holds the
+            // user entries, while "Unfollow" is the mutation we must learn.
+            let isFollowOp = false;
+            if (/follow|friendship/i.test(opName)) {
+              isFollowOp = true;
               try {
-                if (res && typeof res.clone === 'function') {
-                  res.clone().text().then(watchResponseText).catch(() => {});
+                const init = args[1];
+                const body = init && typeof init.body === 'string' ? init.body : null;
+                if (body && body.includes('"variables"')) {
+                  followBuffer.mutationCandidates.push({ opName, queryId, url, bodyText: body });
+                  if (followBuffer.mutationCandidates.length > 5) followBuffer.mutationCandidates.shift();
                 }
               } catch (e) { /* ignore */ }
-            }).catch(() => {});
+            }
+            if ((/Timeline/.test(opName) || isFollowOp) && promise && typeof promise.then === 'function') {
+              // Capture the response body without consuming it for the page
+              promise.then(res => {
+                try {
+                  if (res && typeof res.clone === 'function') {
+                    res.clone().text().then(watchResponseText).catch(() => {});
+                  }
+                } catch (e) { /* ignore */ }
+              }).catch(() => {});
+            }
           }
         }
       } catch (e) { /* ignore */ }
@@ -240,13 +247,14 @@
         const info = this.__sweepx;
         if (info && /follow|friendship/i.test(info.opName)) {
           const body = args[0] == null ? null : String(args[0]);
-          if (body && body.includes('variables')) {
-            followBuffer.lastMutation = {
+          if (body && body.includes('"variables"')) {
+            followBuffer.mutationCandidates.push({
               opName: info.opName,
               queryId: info.queryId,
               url: info.url,
               bodyText: body
-            };
+            });
+            if (followBuffer.mutationCandidates.length > 5) followBuffer.mutationCandidates.shift();
           }
         }
       } catch (e) { /* ignore */ }
@@ -266,7 +274,7 @@
           this.__sweepx = { queryId, opName, url: String(url) };
           if (opName === 'DeleteTweet' || opName === 'DeleteRetweet') {
             report(opName, queryId);
-          } else if (/Timeline/.test(opName)) {
+          } else if (/Timeline/.test(opName) || /follow|friendship/i.test(opName)) {
             this.addEventListener('load', function () {
               watchResponseText(this.responseText);
             });
