@@ -770,7 +770,9 @@ function updateDashFollowingSelection() {
   const selected = getDashSelectedFollowing();
   dashFollowingSelectedCount.textContent = `已选 ${selected.length} / ${dashFollowingUsers.length}`;
   dashUnfollowBtn.textContent = `🚫 开始取关 ${selected.length} 人`;
-  dashUnfollowBtn.disabled = dashUnfollowRunning || selected.length === 0 || !dashUnfollowMutation;
+  // Only disabled while running — every other failure mode is reported on
+  // click with an explicit message instead of a silently dead button
+  dashUnfollowBtn.disabled = dashUnfollowRunning;
   dashFollowingCheckAll.checked = dashFollowingUsers.length > 0 && selected.length === dashFollowingUsers.length;
 }
 
@@ -858,9 +860,23 @@ async function handleDashLoadFollowing() {
 
 async function handleDashStartUnfollow() {
   const selected = getDashSelectedFollowing();
-  if (dashUnfollowRunning || selected.length === 0 || !dashUnfollowMutation) return;
+  // Full state visibility: no more silent no-ops
+  appendLog(`[取关调试] 勾选 ${selected.length} 人 | 取关模板: ${dashUnfollowMutation ? dashUnfollowMutation.opName : '未学习'} | 候选 ${dashFollowMutationCandidates.length} 个 | 会话: ${activeSession ? '✓' : '✗'}`, 'info');
+
+  if (dashUnfollowRunning) {
+    alert('取关任务正在进行中，请等它结束。');
+    return;
+  }
+  if (selected.length === 0) {
+    alert('请先勾选要取关的人（列表默认全选，可逐个取消勾选）。');
+    return;
+  }
   if (!activeSession) {
     alert('未检测到 x.com 登录，无法取关！');
+    return;
+  }
+  if (!dashUnfollowMutation) {
+    alert('取关接口尚未学习：请在「关注」列表页刷新后手动取关 1 人，然后回到这里点「读取已捕获的关注列表」。');
     return;
   }
   if (!client) initClient();
