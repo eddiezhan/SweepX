@@ -662,6 +662,10 @@ function switchDashTab(mode) {
     btn.classList.toggle('active', active);
     content.classList.toggle('active', active);
   }
+  // The shared log travels with the active tab so it is always in view
+  const logSection = document.getElementById('shared-log-section');
+  const slot = document.getElementById(`log-slot-${mode}`);
+  if (logSection && slot) slot.appendChild(logSection);
 }
 
 function sleep(ms) {
@@ -935,6 +939,9 @@ async function handleDashStartUnfollow() {
         fail++;
         appendLog(`[取关] @${u.name} 失败 (HTTP ${res.status})`, 'error');
       }
+      // Near-button live progress (the log sits inside the same tab, but the
+      // status line keeps feedback immediate)
+      dashFollowingStatus.textContent = `取关中 ${ok + fail}/${selected.length} · 最近: @${u.name}`;
     } catch (err) {
       fail++;
       appendLog(`[取关] @${u.name} 异常: ${err.message}`, 'error');
@@ -947,5 +954,6 @@ async function handleDashStartUnfollow() {
   dashUnfollowRunning = false;
   dashFollowingUsers = dashFollowingUsers.filter(u => !unfollowedIds.has(u.id));
   renderDashFollowingList();
+  dashFollowingStatus.textContent = `取关完成: 成功 ${ok}，失败 ${fail}。${fail > 0 ? '失败项仍在列表中可重试。' : ''}`;
   appendLog(`取关完成: 成功 ${ok}，失败 ${fail}。`, fail > 0 ? 'warn' : 'success');
 }

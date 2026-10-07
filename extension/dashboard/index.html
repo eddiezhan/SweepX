@@ -234,6 +234,18 @@
           </table>
         </div>
       </section>
+
+      <div class="log-slot" id="log-slot-archive">
+        <section class="panel-card full-width" id="shared-log-section">
+          <div class="log-header">
+            <span>实时操作审计日志（所有功能共用）</span>
+            <button id="clear-log-btn" class="btn-xs">清屏</button>
+          </div>
+          <div class="log-console" id="log-console">
+            <div class="log-item info">[系统] SweepX 已启动。</div>
+          </div>
+        </section>
+      </div>
       </div>
 
       <!-- Tab: Live Scan -->
@@ -249,6 +261,7 @@
             <button id="dash-scan-btn" class="btn btn-primary">🔍 扫描 x.com 页面</button>
           </div>
           <div id="dash-scan-status" class="file-info-text">请先在浏览器打开 x.com 个人主页（「帖子」或「回复」页均可），然后点击扫描。扫描会自动刷新该页面。</div>
+          <div class="log-slot" id="log-slot-live"></div>
         </section>
       </div>
 
@@ -271,19 +284,9 @@
             </div>
             <div id="dash-following-items" class="following-items"></div>
           </div>
+          <div class="log-slot" id="log-slot-unfollow"></div>
         </section>
       </div>
-
-      <!-- Shared Activity Log (all features) -->
-      <section class="panel-card full-width">
-        <div class="log-header">
-          <span>实时操作审计日志（所有功能共用）</span>
-          <button id="clear-log-btn" class="btn-xs">清屏</button>
-        </div>
-        <div class="log-console" id="log-console">
-          <div class="log-item info">[系统] SweepX 已启动。</div>
-        </div>
-      </section>
     </main>
 
     <footer class="donate-bar">
