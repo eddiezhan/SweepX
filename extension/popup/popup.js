@@ -759,7 +759,7 @@ async function handleStartUnfollow() {
     }
   }
   if (!idField) {
-    alert(`未能从学习的请求中识别目标用户字段，取关终止。候选数: ${cands.length}`);
+    alert(`未能从学习的请求中识别目标用户字段，取关终止。已尝试候选数: ${tryOrder.length}`);
     return;
   }
   unfollowMutation = learnedFrom;
