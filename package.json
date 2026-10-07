@@ -15,5 +15,8 @@
     "privacy"
   ],
   "author": "Antigravity",
-  "license": "MIT"
+  "license": "MIT",
+  "dependencies": {
+    "jszip": "^3.10.2"
+  }
 }

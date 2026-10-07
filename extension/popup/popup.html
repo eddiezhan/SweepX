@@ -2,109 +2,153 @@
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8">
-  <title>deleteX 控制面板</title>
-  <style>
-    body {
-      width: 320px;
-      margin: 0;
-      padding: 16px;
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-      background-color: #0f1419;
-      color: #e7e9ea;
-      box-sizing: border-box;
-    }
-    .header {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      margin-bottom: 12px;
-      border-bottom: 1px solid #2f3336;
-      padding-bottom: 10px;
-    }
-    .logo {
-      font-size: 20px;
-      font-weight: 800;
-      background: linear-gradient(135deg, #1d9bf0, #8ec5fc);
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
-    }
-    .tag {
-      font-size: 11px;
-      background: #1d9bf022;
-      color: #1d9bf0;
-      padding: 2px 6px;
-      border-radius: 4px;
-      border: 1px solid #1d9bf044;
-    }
-    .desc {
-      font-size: 13px;
-      color: #71767b;
-      line-height: 1.4;
-      margin-bottom: 16px;
-    }
-    .status-card {
-      background: #16181c;
-      border: 1px solid #2f3336;
-      border-radius: 8px;
-      padding: 12px;
-      margin-bottom: 16px;
-      font-size: 12px;
-    }
-    .status-row {
-      display: flex;
-      justify-content: space-between;
-      margin-bottom: 6px;
-    }
-    .status-row:last-child {
-      margin-bottom: 0;
-    }
-    .status-val {
-      font-weight: 600;
-      color: #00ba7c;
-    }
-    .status-val.warn {
-      color: #f4212e;
-    }
-    .btn {
-      display: block;
-      width: 100%;
-      box-sizing: border-box;
-      padding: 10px;
-      border: none;
-      border-radius: 9999px;
-      background-color: #1d9bf0;
-      color: #fff;
-      font-weight: 700;
-      font-size: 14px;
-      cursor: pointer;
-      text-align: center;
-      transition: background-color 0.2s;
-    }
-    .btn:hover {
-      background-color: #1a8cd8;
-    }
-  </style>
+  <title>deleteX - 批量删除推文/转推/引用/回复</title>
+  <link rel="stylesheet" href="popup.css">
 </head>
 <body>
-  <div class="header">
-    <div class="logo">deleteX</div>
-    <div class="tag">0 成本 / 本地运行</div>
-  </div>
-  <div class="desc">批量删除 X 的发帖、转推、引用与回复，突破 3200 条限制，保护隐私。</div>
+  <div class="popup-container">
+    <!-- Top Header -->
+    <header class="popup-header">
+      <div class="brand">
+        <span class="logo">delete<span class="highlight">X</span></span>
+        <span class="free-badge">免费/本地</span>
+      </div>
+      <div class="header-actions">
+        <button id="open-sidepanel-btn" class="icon-btn" title="固定到右侧边栏运行">📌 侧栏</button>
+        <button id="open-full-btn" class="icon-btn" title="全屏大屏管理">↗ 大屏</button>
+      </div>
+    </header>
 
-  <div class="status-card">
-    <div class="status-row">
-      <span>登录状态:</span>
-      <span id="login-status" class="status-val">检测中...</span>
+    <!-- Session Status Bar -->
+    <div class="session-bar" id="session-bar">
+      <span class="dot" id="session-dot"></span>
+      <span id="session-text" class="session-text">检查登录状态中...</span>
     </div>
-    <div class="status-row">
-      <span>CSRF 凭证:</span>
-      <span id="csrf-status" class="status-val">--</span>
+
+    <!-- Mode Tabs -->
+    <div class="tabs-nav">
+      <button class="tab-btn active" id="tab-btn-zip" data-tab="tab-zip">📁 归档包 (全量/老数据)</button>
+      <button class="tab-btn" id="tab-btn-live" data-tab="tab-live">⚡ 在线扫描 (近期数据)</button>
+    </div>
+
+    <!-- Tab 1: Zip / Archive Mode -->
+    <div class="tab-content active" id="tab-zip">
+      <div class="drop-area" id="zip-drop-area">
+        <div class="drop-icon">📦</div>
+        <div class="drop-title">拖入推特 <code>.zip</code> 压缩包或 <code>tweets.js</code></div>
+        <div class="drop-sub">无需手动解压，直接拖入下载好的官方压缩包！</div>
+        <input type="file" id="zip-file-input" accept=".zip,.js,.json" style="display: none;">
+      </div>
+      <div class="file-stat-row">
+        <span id="file-loaded-status" class="file-loaded-text">未加载归档包</span>
+        <a href="https://x.com/settings/your_twitter_data" target="_blank" class="archive-link">如何申请官方 Zip? ↗</a>
+      </div>
+    </div>
+
+    <!-- Tab 2: Live Online Scan Mode -->
+    <div class="tab-content" id="tab-live">
+      <div class="live-scan-card">
+        <div class="live-desc">在当前打开的 x.com 个人主页上自动向下滚动扫描推文。适合清理近期数据，无需等待下载归档。</div>
+        <button id="scan-page-btn" class="btn btn-secondary">🔍 自动扫描当前页面推文</button>
+        <div id="live-scan-status" class="scan-status-text">待扫描</div>
+      </div>
+    </div>
+
+    <!-- Category Checkboxes -->
+    <div class="section-card">
+      <div class="section-title">选择要清理的目标类型:</div>
+      <div class="category-grid">
+        <label class="cat-label">
+          <input type="checkbox" id="cat-rt" checked>
+          <span>转发 / 转推 (RT)</span>
+          <span class="cat-count color-rt" id="count-rt">0</span>
+        </label>
+        <label class="cat-label">
+          <input type="checkbox" id="cat-reply" checked>
+          <span>回复别人 (Reply)</span>
+          <span class="cat-count color-reply" id="count-reply">0</span>
+        </label>
+        <label class="cat-label">
+          <input type="checkbox" id="cat-orig">
+          <span>原创发帖 (Post)</span>
+          <span class="cat-count color-orig" id="count-orig">0</span>
+        </label>
+        <label class="cat-label">
+          <input type="checkbox" id="cat-quote">
+          <span>引用推文 (Quote)</span>
+          <span class="cat-count color-quote" id="count-quote">0</span>
+        </label>
+      </div>
+    </div>
+
+    <!-- Advanced Collapsible Filter -->
+    <details class="adv-details">
+      <summary class="adv-summary">⚙️ 高级保护与筛选设置 (可选)</summary>
+      <div class="adv-body">
+        <div class="form-row">
+          <span>只删此日期之前:</span>
+          <input type="date" id="filter-before-date" class="input-date">
+        </div>
+        <div class="form-row">
+          <span>保留高赞推文:</span>
+          <div class="inline-input">
+            <span>点赞 ≥</span>
+            <input type="number" id="keep-fav-input" placeholder="不限" min="0" class="input-num">
+          </div>
+        </div>
+        <div class="form-row">
+          <span>排除包含词 (白名单):</span>
+          <input type="text" id="exclude-kw-input" placeholder="多个词用逗号隔开" class="input-text">
+        </div>
+        <div class="form-row">
+          <label class="checkbox-simple">
+            <input type="checkbox" id="dry-run-check">
+            <span>模拟测试 (Dry-Run，不真实调用接口)</span>
+          </label>
+        </div>
+      </div>
+    </details>
+
+    <!-- Execution Panel -->
+    <div class="action-section">
+      <button id="main-action-btn" class="btn btn-primary" disabled>
+        🚀 开始删除选中的 0 项
+      </button>
+
+      <!-- Progress Section (Hidden initially) -->
+      <div id="progress-wrapper" class="progress-wrapper" style="display: none;">
+        <div class="progress-info">
+          <span id="p-status">准备就绪</span>
+          <span id="p-percent">0.0%</span>
+        </div>
+        <div class="progress-track">
+          <div id="p-fill" class="progress-fill" style="width: 0%;"></div>
+        </div>
+        <div class="progress-stats">
+          <span>进度: <b id="p-cur">0</b>/<b id="p-tot">0</b></span>
+          <span>已删: <b id="p-succ" class="color-rt">0</b></span>
+          <span>提前不存在: <b id="p-already" class="color-warn">0</b></span>
+          <span>失败: <b id="p-fail" class="color-danger">0</b></span>
+        </div>
+        <div id="cooling-box" class="cooling-box" style="display: none;">
+          ⏳ 频率安全休眠中，剩余: <span id="cooling-time">15:00</span>
+        </div>
+        <div class="ctrl-btn-row">
+          <button id="pause-run-btn" class="btn-xs">⏸ 暂停</button>
+          <button id="stop-run-btn" class="btn-xs danger">⏹ 终止</button>
+          <button id="export-csv-btn" class="btn-xs">💾 导出备份 CSV</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Mini Activity Log -->
+    <div class="mini-log-box" id="mini-log-box">
+      <div class="log-line info">[提示] 拖入 Twitter 官方归档 .zip 压缩包或点击在线扫描即可开始。</div>
     </div>
   </div>
 
-  <button id="open-dashboard-btn" class="btn">打开完整控制台</button>
-
-  <script src="popup.js"></script>
+  <!-- Libs & Modules -->
+  <script src="../libs/jszip.min.js"></script>
+  <script type="module" src="popup.js"></script>
 </body>
 </html>
