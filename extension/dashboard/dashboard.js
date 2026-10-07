@@ -204,6 +204,9 @@ function bindEvents() {
     dashFollowingItems.querySelectorAll('input[type="checkbox"]').forEach(cb => { cb.checked = checked; });
     updateDashFollowingSelection();
   });
+
+  // Live scan is the default tab (and the shared log starts inside it)
+  switchDashTab('live');
 }
 
 // --- Resume unfinished run (checkpoint) ---

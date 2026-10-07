@@ -35,12 +35,12 @@
     <main class="main-content">
       <!-- Mode Tabs -->
       <nav class="dash-tabs">
-        <button class="dash-tab-btn active" id="dash-tab-btn-archive">📁 归档清理 (全量)</button>
-        <button class="dash-tab-btn" id="dash-tab-btn-live">⚡ 在线扫描 (近期)</button>
+        <button class="dash-tab-btn active" id="dash-tab-btn-live">⚡ 在线扫描 (近期)</button>
         <button class="dash-tab-btn" id="dash-tab-btn-unfollow">👥 批量取关</button>
+        <button class="dash-tab-btn" id="dash-tab-btn-archive">📁 归档清理 (全量)</button>
       </nav>
 
-      <div id="dash-tab-archive" class="dash-tab active">
+      <div id="dash-tab-live" class="dash-tab active">
       <!-- Overview Stat Cards -->
       <section class="stats-grid">
         <div class="stat-card">
@@ -235,17 +235,7 @@
         </div>
       </section>
 
-      <div class="log-slot" id="log-slot-archive">
-        <section class="panel-card full-width" id="shared-log-section">
-          <div class="log-header">
-            <span>实时操作审计日志（所有功能共用）</span>
-            <button id="clear-log-btn" class="btn-xs">清屏</button>
-          </div>
-          <div class="log-console" id="log-console">
-            <div class="log-item info">[系统] SweepX 已启动。</div>
-          </div>
-        </section>
-      </div>
+      <div class="log-slot" id="log-slot-archive"></div>
       </div>
 
       <!-- Tab: Live Scan -->
@@ -265,7 +255,17 @@
             <div id="dash-scan-result-text" class="scan-result-text"></div>
             <button id="dash-goto-archive-btn" class="btn btn-primary">📊 查看预览并删除 →</button>
           </div>
-          <div class="log-slot" id="log-slot-live"></div>
+          <div class="log-slot" id="log-slot-live">
+            <section class="panel-card full-width" id="shared-log-section">
+              <div class="log-header">
+                <span>实时操作审计日志（所有功能共用）</span>
+                <button id="clear-log-btn" class="btn-xs">清屏</button>
+              </div>
+              <div class="log-console" id="log-console">
+                <div class="log-item info">[系统] SweepX 已启动。</div>
+              </div>
+            </section>
+          </div>
         </section>
       </div>
 
