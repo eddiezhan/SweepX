@@ -65,6 +65,13 @@
           ③ 下方点「读取」→「开始取关」。每次约 3-6 秒一个，太急会触发限制。</div>
         <button id="load-following-btn" class="btn btn-secondary">📋 读取已捕获的关注列表</button>
         <div id="following-status" class="scan-status-text">待读取</div>
+        <div id="following-list" class="following-list" style="display:none">
+          <div class="following-list-header">
+            <label><input type="checkbox" id="following-check-all" checked> <b>全选</b></label>
+            <span id="following-selected-count" class="scan-status-text"></span>
+          </div>
+          <div id="following-items" class="following-items"></div>
+        </div>
         <button id="unfollow-btn" class="btn btn-primary" disabled>🚫 开始取关 0 人</button>
       </div>
     </div>

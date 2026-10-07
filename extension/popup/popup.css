@@ -561,3 +561,48 @@ body {
 .log-line.success { color: var(--success); }
 .log-line.warn { color: var(--warn); }
 .log-line.error { color: var(--danger); }
+
+/* Following selection list (unfollow) */
+.following-list {
+  margin: 8px 0;
+}
+
+.following-list-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 11px;
+  padding: 4px 2px;
+}
+
+.following-items {
+  max-height: 200px;
+  overflow-y: auto;
+  border: 1px solid var(--border, #2f3336);
+  border-radius: 8px;
+  margin-bottom: 8px;
+}
+
+.following-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  font-size: 12px;
+  cursor: pointer;
+  border-bottom: 1px solid var(--border, #2f3336);
+}
+
+.following-item:last-child {
+  border-bottom: none;
+}
+
+.following-item:hover {
+  background: rgba(29, 155, 240, 0.08);
+}
+
+.following-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

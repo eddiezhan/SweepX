@@ -95,11 +95,58 @@ const resumeDiscardBtn = document.getElementById('resume-discard-btn');
 const loadFollowingBtn = document.getElementById('load-following-btn');
 const followingStatus = document.getElementById('following-status');
 const unfollowBtn = document.getElementById('unfollow-btn');
+const followingListWrap = document.getElementById('following-list');
+const followingItemsBox = document.getElementById('following-items');
+const followingCheckAll = document.getElementById('following-check-all');
+const followingSelectedCount = document.getElementById('following-selected-count');
 
 // Unfollow state
 let followingUsers = [];
 let unfollowMutation = null;
 let unfollowRunning = false;
+
+function getSelectedFollowing() {
+  const ids = new Set(
+    Array.from(followingItemsBox.querySelectorAll('input[type="checkbox"]:checked')).map(cb => cb.dataset.id)
+  );
+  return followingUsers.filter(u => ids.has(u.id));
+}
+
+function updateFollowingSelection() {
+  const selected = getSelectedFollowing();
+  followingSelectedCount.textContent = `已选 ${selected.length} / ${followingUsers.length}`;
+  unfollowBtn.textContent = `🚫 开始取关 ${selected.length} 人`;
+  unfollowBtn.disabled = unfollowRunning || selected.length === 0 || !unfollowMutation;
+  followingCheckAll.checked = followingUsers.length > 0 && selected.length === followingUsers.length;
+}
+
+function renderFollowingList() {
+  if (followingUsers.length === 0) {
+    followingListWrap.style.display = 'none';
+    followingItemsBox.innerHTML = '';
+    updateFollowingSelection();
+    return;
+  }
+  followingListWrap.style.display = 'block';
+  followingItemsBox.innerHTML = '';
+  for (const u of followingUsers) {
+    const row = document.createElement('label');
+    row.className = 'following-item';
+    const cb = document.createElement('input');
+    cb.type = 'checkbox';
+    cb.checked = true;
+    cb.dataset.id = u.id;
+    cb.addEventListener('change', updateFollowingSelection);
+    const span = document.createElement('span');
+    span.className = 'following-name';
+    span.textContent = `@${u.name}`;
+    span.title = `@${u.name} (${u.id})`;
+    row.appendChild(cb);
+    row.appendChild(span);
+    followingItemsBox.appendChild(row);
+  }
+  updateFollowingSelection();
+}
 
 /**
  * Picks the real unfollow mutation from captured candidates. List queries
@@ -223,6 +270,11 @@ function bindEvents() {
   // Unfollow
   loadFollowingBtn.addEventListener('click', handleLoadFollowing);
   unfollowBtn.addEventListener('click', handleStartUnfollow);
+  followingCheckAll.addEventListener('change', () => {
+    const checked = followingCheckAll.checked;
+    followingItemsBox.querySelectorAll('input[type="checkbox"]').forEach(cb => { cb.checked = checked; });
+    updateFollowingSelection();
+  });
 }
 
 function switchTab(mode) {
@@ -624,8 +676,8 @@ async function handleLoadFollowing() {
       followingStatus.textContent =
         `已捕获 ${followingUsers.length} 个关注，取关接口已学习 ✓（演示接口: ${unfollowMutation.opName}）`;
     }
-    unfollowBtn.disabled = !(followingUsers.length > 0 && unfollowMutation);
-    unfollowBtn.textContent = `🚫 开始取关 ${followingUsers.length} 人`;
+    unfollowBtn.disabled = false;
+    renderFollowingList();
   } catch (err) {
     followingStatus.textContent = `读取失败: ${err.message}`;
     log(`取关读取异常: ${err.message}`, 'error');
@@ -636,13 +688,14 @@ async function handleLoadFollowing() {
 }
 
 async function handleStartUnfollow() {
-  if (unfollowRunning || followingUsers.length === 0 || !unfollowMutation) return;
+  const selected = getSelectedFollowing();
+  if (unfollowRunning || selected.length === 0 || !unfollowMutation) return;
   if (!activeSession) {
     alert('未检测到 x.com 登录，无法取关！');
     return;
   }
 
-  const confirmMsg = `确定要取消关注 ${followingUsers.length} 人吗？\n\n每次间隔约 3-6 秒，中途可随时关闭弹窗停止。`;
+  const confirmMsg = `确定要取消关注选中的 ${selected.length} 人吗？\n\n每次间隔约 3-6 秒，中途可随时关闭弹窗停止。`;
   if (!confirm(confirmMsg)) return;
 
   if (!client) {
@@ -713,8 +766,9 @@ async function handleStartUnfollow() {
   unfollowBtn.disabled = true;
   let ok = 0;
   let fail = 0;
+  const unfollowedIds = new Set();
 
-  for (const u of followingUsers) {
+  for (const u of selected) {
     try {
       let body;
       if (isJsonBody) {
@@ -736,6 +790,7 @@ async function handleStartUnfollow() {
       });
       if (res.ok) {
         ok++;
+        unfollowedIds.add(u.id);
         log(`[取关] 已取消关注 @${u.name}`, 'success');
       } else if (res.status === 429) {
         log('[取关] 触发频率限制，停止本次任务。稍后再来。', 'error');
@@ -749,15 +804,15 @@ async function handleStartUnfollow() {
       log(`[取关] @${u.name} 异常: ${err.message}`, 'error');
     }
 
-    unfollowBtn.textContent = `🚫 取关中 ${ok + fail}/${followingUsers.length}`;
+    unfollowBtn.textContent = `🚫 取关中 ${ok + fail}/${selected.length}`;
     await sleep(3000 + Math.random() * 3000);
   }
 
   unfollowRunning = false;
-  unfollowBtn.disabled = false;
-  unfollowBtn.textContent = `🚫 开始取关 ${followingUsers.length - ok} 人`;
-  followingUsers = followingUsers.slice(ok); // keep only unprocessed ones
-  log(`取关完成: 成功 ${ok}，失败 ${fail}。${fail > 0 ? '失败项可重新读取后再试。' : ''}`, fail > 0 ? 'warn' : 'success');
+  // Remove successfully unfollowed accounts from the list; failures stay for retry
+  followingUsers = followingUsers.filter(u => !unfollowedIds.has(u.id));
+  renderFollowingList();
+  log(`取关完成: 成功 ${ok}，失败 ${fail}。${fail > 0 ? '失败项仍在列表中，可重新勾选重试。' : ''}`, fail > 0 ? 'warn' : 'success');
 }
 
 /** Builds the deletion engine with the shared UI wiring. */
