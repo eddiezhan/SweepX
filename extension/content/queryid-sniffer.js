@@ -41,6 +41,21 @@
                                // the popup picks the real mutation from candidates)
   };
 
+  // Rolling log of recent POST requests with bodies — ground truth for
+  // "where does the unfollow actually go", surfaced in the popup log
+  const recentPosts = [];
+  function pushRecentPost(url, body) {
+    try {
+      const u = String(url);
+      const b = String(body || '');
+      // Skip obvious telemetry floods; keep API calls and anything carrying user ids
+      if (/\/jot|logging|analytics/i.test(u)) return;
+      if (!u.includes('/i/api/') && !/user_id|screen_name|rest_id/i.test(b)) return;
+      recentPosts.push({ url: u.slice(0, 300), body: b.slice(0, 300) });
+      if (recentPosts.length > 25) recentPosts.shift();
+    } catch (e) { /* ignore */ }
+  }
+
   function trackOp(name) {
     if (!sniff.graphqlOps.includes(name)) {
       sniff.graphqlOps.push(name);
@@ -59,7 +74,8 @@
         window.postMessage({
           source: 'sweepx-following',
           users: Array.from(followBuffer.users.values()),
-          mutationCandidates: followBuffer.mutationCandidates
+          mutationCandidates: followBuffer.mutationCandidates,
+          recentPosts: recentPosts.slice()
         }, '*');
         window.postMessage({ source: 'sweepx-sniff-debug', sniff: { ...sniff } }, '*');
       } catch (e) { /* ignore */ }
@@ -202,7 +218,14 @@
       const promise = origFetch.apply(this, args);
       try {
         const input = args[0];
+        const init = args[1];
         const url = typeof input === 'string' ? input : (input && input.url) || '';
+        // Record every POST with a body (ground-truth request log)
+        if (init && typeof init.body === 'string' && init.body) {
+          pushRecentPost(url, init.body);
+        } else if (init && init.body) {
+          pushRecentPost(url, '(non-string body)');
+        }
         const m = GRAPHQL_RE.exec(url);
         if (m) {
           const [, queryId, opName] = m;
@@ -263,18 +286,17 @@
   if (typeof origSend === 'function') {
     XMLHttpRequest.prototype.send = function (...args) {
       try {
+        const body = args[0] == null ? '' : String(args[0]);
+        if (body) pushRecentPost(this.__sweepxAllUrl || '', body);
         const info = this.__sweepx;
-        if (info && /follow|friendship/i.test(info.opName)) {
-          const body = args[0] == null ? null : String(args[0]);
-          if (body && body.includes('"variables"')) {
-            followBuffer.mutationCandidates.push({
-              opName: info.opName,
-              queryId: info.queryId,
-              url: info.url,
-              bodyText: body
-            });
-            if (followBuffer.mutationCandidates.length > 5) followBuffer.mutationCandidates.shift();
-          }
+        if (info && /follow|friendship/i.test(info.opName) && body && body.includes('"variables"')) {
+          followBuffer.mutationCandidates.push({
+            opName: info.opName,
+            queryId: info.queryId,
+            url: info.url,
+            bodyText: body
+          });
+          if (followBuffer.mutationCandidates.length > 5) followBuffer.mutationCandidates.shift();
         }
       } catch (e) { /* ignore */ }
       return origSend.apply(this, args);
@@ -286,6 +308,7 @@
   if (typeof origOpen === 'function') {
     XMLHttpRequest.prototype.open = function (method, url, ...rest) {
       try {
+        this.__sweepxAllUrl = String(url);
         const m = GRAPHQL_RE.exec(String(url));
         if (m) {
           const [, queryId, opName] = m;

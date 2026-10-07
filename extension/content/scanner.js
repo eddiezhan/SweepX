@@ -15,7 +15,8 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     sleep(500).then(() => sendResponse({
       success: true,
       users: Array.from(followingUsersMap.values()),
-      mutationCandidates: followMutationCandidates
+      mutationCandidates: followMutationCandidates,
+      recentPosts: recentPostsLog
     }));
     return true;
   }
@@ -31,6 +32,7 @@ let lastSniffDebug = null;
 // Following-list capture (for the unfollow tool)
 const followingUsersMap = new Map();
 let followMutationCandidates = [];
+let recentPostsLog = [];
 
 function sleep(ms) {
   return new Promise(r => setTimeout(r, ms));
@@ -59,6 +61,7 @@ window.addEventListener('message', (event) => {
       }
     }
     if (Array.isArray(d.mutationCandidates)) followMutationCandidates = d.mutationCandidates;
+    if (Array.isArray(d.recentPosts)) recentPostsLog = d.recentPosts;
   } else if (d.source === 'sweepx-sniff-debug' && d.sniff) {
     lastSniffDebug = d.sniff;
   }

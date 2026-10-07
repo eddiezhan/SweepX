@@ -583,13 +583,36 @@ async function handleLoadFollowing() {
     }
 
     followingUsers = (resp && resp.users) || [];
-    unfollowMutation = pickUnfollowMutation(resp && resp.mutationCandidates);
 
-    const cands = (resp && resp.mutationCandidates) || [];
+    // Auto-promote any recent POST that looks like an unfollow into a candidate
+    const cands = ((resp && resp.mutationCandidates) || []).slice();
+    const posts = (resp && resp.recentPosts) || [];
+    for (const p of posts) {
+      if (/destroy|unfollow/i.test(p.url) && !cands.some(c => c.url === p.url && c.bodyText === p.body)) {
+        cands.push({
+          opName: (p.url.split('/').pop() || 'unknown').split('?')[0],
+          queryId: '',
+          url: p.url,
+          bodyText: p.body
+        });
+      }
+    }
+    unfollowMutation = pickUnfollowMutation(cands);
+
     if (cands.length > 0) {
       log(`[取关候选] ${cands.map(c => c.opName).join(', ')}`, 'info');
     } else {
       log('[取关候选] 无 —— 手动取关动作未被捕获。确认：页面已刷新 + 就在「关注」页上点的取关按钮。', 'warn');
+    }
+    // Ground truth: print the last POST requests so the unfollow call is visible
+    if (posts.length > 0) {
+      log(`[最近POST] 共 ${posts.length} 条（最新在上）:`, 'info');
+      for (const p of posts.slice(-8).reverse()) {
+        log(`  ↳ ${p.url.slice(0, 110)}`, 'info');
+        log(`    body: ${p.body.slice(0, 140)}`, 'info');
+      }
+    } else {
+      log('[最近POST] 无记录 —— 嗅探器未注入或页面未刷新，请 F5 刷新 x.com 后重试。', 'warn');
     }
 
     if (followingUsers.length === 0) {
