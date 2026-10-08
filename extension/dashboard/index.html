@@ -197,7 +197,7 @@
       <!-- Preview Table Section -->
       <section class="panel-card full-width">
         <div class="table-header-row">
-          <h3>待删除数据预览 (显示前 50 条匹配项)</h3>
+          <h3>待删除数据预览（分页浏览全部数据，取消勾选 = 保留）</h3>
           <span class="preview-count" id="preview-count-label">共匹配 0 条</span>
         </div>
         <div class="table-responsive">
@@ -218,6 +218,11 @@
               </tr>
             </tbody>
           </table>
+        </div>
+        <div class="pagination-bar" id="preview-pagination" style="display:none;">
+          <button id="preview-prev-btn" class="btn-xs">← 上一页</button>
+          <span id="preview-page-info" class="file-info-text"></span>
+          <button id="preview-next-btn" class="btn-xs">下一页 →</button>
         </div>
       </section>
 

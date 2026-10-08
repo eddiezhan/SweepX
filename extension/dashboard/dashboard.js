@@ -113,6 +113,13 @@ const dashFollowingItems = document.getElementById('dash-following-items');
 const dashFollowingCheckAll = document.getElementById('dash-following-check-all');
 const dashFollowingSelectedCount = document.getElementById('dash-following-selected-count');
 const previewCheckAll = document.getElementById('preview-check-all');
+const previewPrevBtn = document.getElementById('preview-prev-btn');
+const previewNextBtn = document.getElementById('preview-next-btn');
+const previewPageInfo = document.getElementById('preview-page-info');
+const previewPagination = document.getElementById('preview-pagination');
+
+const PREVIEW_PAGE_SIZE = 50;
+let previewPage = 1;
 
 // Unfollow state (dashboard)
 let dashFollowingUsers = [];
@@ -219,6 +226,15 @@ function bindEvents() {
       matchedTweets.forEach(t => previewExcluded.add(t.id));
     }
     renderPreviewTable();
+  });
+
+  // Preview pagination
+  previewPrevBtn.addEventListener('click', () => {
+    if (previewPage > 1) { previewPage--; renderPreviewTable(); }
+  });
+  previewNextBtn.addEventListener('click', () => {
+    const totalPages = Math.max(1, Math.ceil(matchedTweets.length / PREVIEW_PAGE_SIZE));
+    if (previewPage < totalPages) { previewPage++; renderPreviewTable(); }
   });
 
   // Live scan is the default tab (and the shared log starts inside it)
@@ -336,9 +352,11 @@ function applyFilters() {
     statMatched.textContent = '待清理: 0';
     startBtn.disabled = true;
     exportBtn.disabled = true;
+    previewPage = 1;
     renderPreviewTable();
     return;
   }
+  previewPage = 1; // filters/data changed — restart from the first page
 
   const categories = [];
   if (filterOriginal.checked) categories.push(TweetCategory.ORIGINAL);
@@ -373,13 +391,20 @@ function applyFilters() {
 
 function renderPreviewTable() {
   previewTbody.innerHTML = '';
+
   if (matchedTweets.length === 0) {
     previewTbody.innerHTML = '<tr><td colspan="6" style="text-align: center; color: #71767b; padding: 20px;">没有符合筛选条件的数据</td></tr>';
     previewCountLabel.textContent = '共匹配 0 条 · 已选 0 条';
+    previewPagination.style.display = 'none';
     return;
   }
 
-  const itemsToShow = matchedTweets.slice(0, 50);
+  // Pagination — browse the FULL matched set, 50 per page
+  const totalPages = Math.max(1, Math.ceil(matchedTweets.length / PREVIEW_PAGE_SIZE));
+  previewPage = Math.min(Math.max(1, previewPage), totalPages);
+  const start = (previewPage - 1) * PREVIEW_PAGE_SIZE;
+  const itemsToShow = matchedTweets.slice(start, start + PREVIEW_PAGE_SIZE);
+
   for (const t of itemsToShow) {
     const tr = document.createElement('tr');
     const trClass = previewExcluded.has(t.id) ? 'preview-row excluded' : 'preview-row';
@@ -412,6 +437,11 @@ function renderPreviewTable() {
     });
     previewTbody.appendChild(tr);
   }
+
+  previewPageInfo.textContent = `第 ${previewPage} / ${totalPages} 页 · 本页 ${itemsToShow[0] ? start + 1 : 0}-${start + itemsToShow.length} 条`;
+  previewPrevBtn.disabled = previewPage <= 1;
+  previewNextBtn.disabled = previewPage >= totalPages;
+  previewPagination.style.display = 'flex';
   updateDeletionSelection();
 }
 

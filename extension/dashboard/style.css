@@ -701,3 +701,11 @@ body {
 .preview-row.excluded {
   opacity: 0.4;
 }
+
+.pagination-bar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  margin-top: 12px;
+}
