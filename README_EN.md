@@ -32,7 +32,7 @@ Bulk-delete your posts / retweets / quotes / replies, and bulk-unfollow — your
 
 ## 📦 Install
 
-1. Download this repo (unzip, or `git clone`)
+1. Download `sweepx-extension-v*.zip` from [Releases](https://github.com/eddiezhan/SweepX/releases/latest) and unzip (or grab the whole repo: `Code → Download ZIP` / `git clone`)
 2. Open `chrome://extensions` in Chrome
 3. Enable **Developer mode** (top right)
 4. Click **Load unpacked** and select the `extension/` folder
@@ -47,7 +47,7 @@ Bulk-delete your posts / retweets / quotes / replies, and bulk-unfollow — your
 | Best for | quick small batches | deep scans, large batches, preview table |
 | Live scan / unfollow / archive | ✅ all three | ✅ all three |
 | Log | mini log | big activity log (follows the active tab) |
-| Data preview table | ✗ | ✅ first 50 matched |
+| Data preview table | ✗ | ✅ paginated over the full matched set (50/page) |
 | Checkpoint resume | ✅ shared between both | ✅ |
 
 > The dashboard's deletion console is shared by the live-scan and archive tabs — scan, then delete right there.

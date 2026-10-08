@@ -32,7 +32,7 @@
 
 ## 📦 安装
 
-1. 下载本仓库（`Code → Download ZIP` 并解压，或 `git clone`）
+1. 从 [Releases](https://github.com/eddiezhan/SweepX/releases/latest) 下载 `sweepx-extension-v*.zip` 并解压（或下载本仓库：`Code → Download ZIP` / `git clone`）
 2. 打开 Chrome，访问 `chrome://extensions`
 3. 打开右上角**开发者模式**
 4. 点击**加载已解压的扩展程序**，选择本项目的 `extension/` 目录
@@ -47,7 +47,7 @@
 | 适合 | 快速小批量 | 深度扫描、大批量、需要看预览表格 |
 | 在线扫描 / 取关 / 归档 | ✅ 三合一 | ✅ 三合一 |
 | 日志 | 迷你日志 | 大日志区（跟标签走） |
-| 数据预览表格 | ✗ | ✅ 前 50 条 |
+| 数据预览表格 | ✗ | ✅ 分页浏览全部匹配（每页 50 条） |
 | 断点续删 | ✅ 两边通用（进度存在同一处） | ✅ |
 
 > 大屏的「删除执行台」为在线扫描和归档两个标签共享——扫完当场就能删，不用跳转。

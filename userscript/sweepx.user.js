@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SweepX - 批量删除 X 发帖/转推/引用/回复
-// @namespace    https://github.com/SweepX/SweepX
-// @version      1.0.0
+// @namespace    https://github.com/eddiezhan/SweepX
+// @version      1.2.0
 // @description  免费且保护隐私的 X (Twitter) 历史推文、转推、引用与回复批量清理工具 (Tampermonkey 版本)
 // @author       Antigravity
 // @match        https://x.com/*
